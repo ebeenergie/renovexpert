@@ -9,9 +9,14 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.3",
     "next": "14.2.5",
     "react": "^18",
-    "react-dom": "^18",
-    "@anthropic-ai/sdk": "^0.24.3"
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "typescript": "^6.0.3"
   }
 }
