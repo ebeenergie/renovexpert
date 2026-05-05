@@ -1,16 +1,45 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import BottomNav from '../components/BottomNav'
+import SignaturePad from '../components/SignaturePad'
 
 const STORAGE_KEY = 'renovexpert_devis'
+const SETTINGS_KEY = 'renovexpert_settings'
+
 const TAX_RATES = [
   { label: 'TVA 5,5% (rénovation énergétique)', value: 5.5 },
   { label: 'TVA 10% (travaux de rénovation)', value: 10 },
   { label: 'TVA 20% (taux normal)', value: 20 },
 ]
+
+const DEFAULT_CGU = `CONDITIONS GÉNÉRALES DE VENTE — TRAVAUX DE RÉNOVATION
+
+Article 1 – Objet
+Les présentes conditions générales régissent l'ensemble des prestations de travaux réalisées par l'artisan. Toute commande implique l'acceptation sans réserve de ces conditions.
+
+Article 2 – Devis et commande
+Le devis est valable 30 jours à compter de sa date d'émission. Sa signature par le client vaut bon de commande et accord sur le prix et les modalités d'exécution.
+
+Article 3 – Prix et TVA
+Les prix sont indiqués hors taxes. La TVA applicable est calculée au taux en vigueur à la date de la facture, conformément à la réglementation fiscale en vigueur.
+
+Article 4 – Paiement
+Un acompte de 30% est demandé à la commande. Le solde est exigible à réception des travaux. Tout retard de paiement entraîne des pénalités au taux légal majoré de 5 points, ainsi qu'une indemnité forfaitaire de 40 € pour frais de recouvrement.
+
+Article 5 – Délais d'exécution
+Les délais communiqués sont donnés à titre indicatif. L'artisan ne saurait être tenu responsable des retards dus à des cas de force majeure ou à des causes extérieures à sa volonté.
+
+Article 6 – Garanties légales
+Les travaux sont soumis à la garantie de parfait achèvement (1 an), la garantie biennale (2 ans) et la garantie décennale (10 ans), conformément aux articles 1792 et suivants du Code civil.
+
+Article 7 – Assurance
+L'artisan est couvert par une assurance responsabilité civile professionnelle et une garantie décennale. Une attestation d'assurance peut être fournie sur simple demande.
+
+Article 8 – Règlement des litiges
+En cas de litige, les parties rechercheront en priorité une solution amiable. À défaut d'accord, le tribunal compétent sera celui du lieu d'exécution des travaux.`
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
@@ -29,6 +58,13 @@ function loadDevis() {
 
 function saveDevis(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+}
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
+    return { cgu: s.cgu || DEFAULT_CGU, artisanSignature: s.artisanSignature || null }
+  } catch { return { cgu: DEFAULT_CGU, artisanSignature: null } }
 }
 
 const emptyForm = () => ({
@@ -54,10 +90,22 @@ export default function DevisPage() {
   const [showCatPicker, setShowCatPicker] = useState(false)
   const [catSearch, setCatSearch] = useState('')
   const [catTypeFilter, setCatTypeFilter] = useState('tous')
-  const [view, setView] = useState('list') // 'list' | 'create' | 'detail' | 'print'
+  const [view, setView] = useState('list')
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(emptyForm())
   const [formError, setFormError] = useState('')
+  const [toast, setToast] = useState('')
+
+  // Settings / CGU
+  const [settings, setSettings] = useState({ cgu: DEFAULT_CGU, artisanSignature: null })
+  const [cguEditing, setCguEditing] = useState(false)
+  const [cguDraft, setCguDraft] = useState('')
+
+  // Signing
+  const [showSignModal, setShowSignModal] = useState(false)
+  const [signStep, setSignStep] = useState(1)
+  const artisanPadRef = useRef(null)
+  const clientPadRef = useRef(null)
 
   useEffect(() => {
     const stored = localStorage.getItem('renovexpert_user')
@@ -68,6 +116,7 @@ export default function DevisPage() {
     setClients(JSON.parse(localStorage.getItem('renovexpert_clients') || '[]'))
     const cat = localStorage.getItem('renovexpert_catalogue')
     if (cat) setCatalogue(JSON.parse(cat))
+    setSettings(loadSettings())
 
     const params = new URLSearchParams(window.location.search)
     const cId = params.get('clientId')
@@ -86,6 +135,41 @@ export default function DevisPage() {
   }, [router])
 
   const persistAndSet = (updated) => { saveDevis(updated); setDevisList(updated) }
+  function toast3(msg) { setToast(msg); setTimeout(() => setToast(''), 3500) }
+
+  function persistSettings(patch) {
+    const updated = { ...settings, ...patch }
+    setSettings(updated)
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated))
+  }
+
+  function openSignModal() {
+    setSignStep(1)
+    setShowSignModal(true)
+  }
+
+  function handleArtisanSign() {
+    if (artisanPadRef.current?.isEmpty()) { alert('Veuillez signer avant de continuer.'); return }
+    const sig = artisanPadRef.current.toDataURL()
+    persistSettings({ artisanSignature: sig })
+    setSignStep(2)
+  }
+
+  function handleClientSign() {
+    if (clientPadRef.current?.isEmpty()) { alert('Le client doit signer avant de valider.'); return }
+    const clientSig = clientPadRef.current.toDataURL()
+    const artisanSig = artisanPadRef.current ? artisanPadRef.current.toDataURL() : settings.artisanSignature
+    const signedAt = new Date().toLocaleString('fr-FR')
+    const updated = devisList.map(d =>
+      d.id === selected.id
+        ? { ...d, locked: true, artisanSignature: artisanSig, clientSignature: clientSig, signedAt, status: 'accepte' }
+        : d
+    )
+    persistAndSet(updated)
+    setSelected(updated.find(d => d.id === selected.id))
+    setShowSignModal(false)
+    toast3('✅ Devis signé électroniquement et verrouillé !')
+  }
 
   // Calculations
   const calcSubtotal = (items, laborCost) =>
@@ -99,7 +183,6 @@ export default function DevisPage() {
 
   const fmt = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 
-  // Item management
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { id: generateId(), description: '', quantity: 1, unitPrice: 0 }] }))
   const selectFromCatalogue = (catItem) => {
     setForm(f => ({ ...f, items: [...f.items, { id: generateId(), description: catItem.name + (catItem.description ? ` — ${catItem.description}` : ''), quantity: 1, unitPrice: catItem.unitPrice }] }))
@@ -132,6 +215,8 @@ export default function DevisPage() {
   }
 
   const handleDelete = (id) => {
+    const d = devisList.find(d => d.id === id)
+    if (d?.locked) { alert('Ce devis est verrouillé (signé) et ne peut pas être supprimé.'); return }
     if (!confirm('Supprimer ce devis définitivement ?')) return
     const updated = devisList.filter(d => d.id !== id)
     persistAndSet(updated)
@@ -139,6 +224,8 @@ export default function DevisPage() {
   }
 
   const handleStatusChange = (id, status) => {
+    const d = devisList.find(d => d.id === id)
+    if (d?.locked) return
     const updated = devisList.map(d => d.id === id ? { ...d, status } : d)
     persistAndSet(updated)
     if (selected?.id === id) setSelected(updated.find(d => d.id === id))
@@ -156,7 +243,7 @@ export default function DevisPage() {
   }
   const STATUS_LABELS = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté', refuse: 'Refusé' }
 
-  // Print view
+  // ─── PRINT VIEW ────────────────────────────────────────────────────────────
   if (view === 'print' && selected) {
     const sub = calcSubtotal(selected.items, selected.laborCost)
     const tx = calcTax(sub, selected.taxRate)
@@ -168,6 +255,7 @@ export default function DevisPage() {
           <button onClick={() => setView('detail')} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', color: '#64748b', padding: '0.8rem 1.5rem', borderRadius: '8px', cursor: 'pointer' }}>← Retour</button>
         </div>
         <div className="print-page">
+          {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '2px solid #1e3a5f' }}>
             <div>
               <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1e3a5f' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></div>
@@ -177,9 +265,11 @@ export default function DevisPage() {
               <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e3a5f' }}>DEVIS</div>
               <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{selected.numero}</div>
               <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Date : {selected.createdAt}</div>
+              {selected.locked && <div style={{ color: '#16a34a', fontSize: '0.8rem', fontWeight: '700', marginTop: '0.3rem' }}>✅ Signé électroniquement le {selected.signedAt}</div>}
             </div>
           </div>
 
+          {/* Client + Objet */}
           <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem' }}>
             <div style={{ flex: 1, backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
               <div style={{ fontWeight: '700', color: '#1e3a5f', marginBottom: '0.5rem' }}>CLIENT</div>
@@ -194,6 +284,7 @@ export default function DevisPage() {
             </div>
           </div>
 
+          {/* Items table */}
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1.5rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#1e3a5f', color: 'white' }}>
@@ -223,6 +314,7 @@ export default function DevisPage() {
             </tbody>
           </table>
 
+          {/* Totals */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
             <div style={{ width: '280px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
@@ -231,7 +323,7 @@ export default function DevisPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
                 <span style={{ color: '#64748b' }}>TVA ({selected.taxRate}%)</span><span style={{ fontWeight: '600' }}>{fmt(tx)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.7rem 0', backgroundColor: '#1e3a5f', color: 'white', marginTop: '0.5rem', borderRadius: '6px', padding: '0.8rem 1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#1e3a5f', color: 'white', marginTop: '0.5rem', borderRadius: '6px', padding: '0.8rem 1rem' }}>
                 <span style={{ fontWeight: '700', fontSize: '1.1rem' }}>TOTAL TTC</span><span style={{ fontWeight: '800', fontSize: '1.2rem' }}>{fmt(tot)}</span>
               </div>
             </div>
@@ -244,14 +336,35 @@ export default function DevisPage() {
             </div>
           )}
 
-          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>
-            Devis valable 30 jours. Signature précédée de la mention "Bon pour accord".
+          {/* Signatures */}
+          {selected.locked && selected.artisanSignature && selected.clientSignature && (
+            <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid #e2e8f0' }}>
+              <div style={{ fontWeight: '700', color: '#1e3a5f', marginBottom: '1rem', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Signatures électroniques</div>
+              <div style={{ display: 'flex', gap: '2rem' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.4rem' }}>Artisan — {selected.artisanName}</div>
+                  <img src={selected.artisanSignature} alt="Signature artisan" style={{ maxWidth: '100%', height: '80px', objectFit: 'contain', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: '#fafafa' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.4rem' }}>Client — {selected.clientName}</div>
+                  <img src={selected.clientSignature} alt="Signature client" style={{ maxWidth: '100%', height: '80px', objectFit: 'contain', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: '#fafafa' }} />
+                </div>
+              </div>
+              {selected.signedAt && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.5rem' }}>Signé électroniquement le {selected.signedAt}</div>}
+            </div>
+          )}
+
+          {/* CGU */}
+          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: '700', color: '#94a3b8', marginBottom: '0.5rem', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conditions Générales de Vente</div>
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{settings.cgu}</div>
           </div>
         </div>
       </div>
     )
   }
 
+  // ─── MAIN APP ──────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8' }}>
       {/* Navbar */}
@@ -269,7 +382,7 @@ export default function DevisPage() {
       </nav>
 
       <div className="page-layout no-print">
-        {/* Left panel */}
+        {/* ── Left sidebar ── */}
         <div className="sidebar-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
             <h1 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '0.25rem' }}>📄 Mes Devis</h1>
@@ -294,9 +407,12 @@ export default function DevisPage() {
               return (
                 <div key={d.id} onClick={() => { setSelected(d); setView('detail') }}
                   style={{ backgroundColor: isActive ? '#1e3a5f' : 'white', borderRadius: '12px', padding: '1rem', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: `2px solid ${isActive ? '#d97706' : 'transparent'}`, transition: 'all 0.15s' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', alignItems: 'center' }}>
                     <span style={{ fontWeight: '700', fontSize: '0.9rem', color: isActive ? 'white' : '#1e3a5f' }}>{d.clientName}</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: '700', padding: '0.15rem 0.5rem', borderRadius: '999px', backgroundColor: sc.bg, color: sc.color }}>{STATUS_LABELS[d.status]}</span>
+                    <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                      {d.locked && <span style={{ fontSize: '0.65rem', fontWeight: '700', padding: '0.1rem 0.4rem', borderRadius: '999px', backgroundColor: '#dcfce7', color: '#15803d' }}>✅ Signé</span>}
+                      <span style={{ fontSize: '0.7rem', fontWeight: '700', padding: '0.15rem 0.5rem', borderRadius: '999px', backgroundColor: sc.bg, color: sc.color }}>{STATUS_LABELS[d.status]}</span>
+                    </div>
                   </div>
                   <div style={{ fontSize: '0.78rem', color: isActive ? '#94a3b8' : '#64748b', marginBottom: '0.3rem' }}>{d.numero} · {d.createdAt}</div>
                   <div style={{ fontSize: '0.88rem', fontWeight: '700', color: isActive ? '#fbbf24' : '#d97706' }}>{fmt(tot)}</div>
@@ -306,7 +422,7 @@ export default function DevisPage() {
           </div>
         </div>
 
-        {/* Main panel */}
+        {/* ── Main panel ── */}
         <div className="main-panel">
 
           {/* CREATE FORM */}
@@ -320,43 +436,39 @@ export default function DevisPage() {
                 <div style={{ padding: '1.2rem', backgroundColor: '#f8fafc', borderRadius: '10px' }}>
                   <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e3a5f', marginBottom: '1rem' }}>👤 Informations client</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                  {clients.length > 0 && (
-                    <div>
-                      <label style={labelStyle}>Choisir un client existant</label>
-                      <select
-                        value={form.clientId}
-                        onChange={e => {
-                          const c = clients.find(cl => cl.id === e.target.value)
-                          if (c) setForm(f => ({ ...f, clientId: c.id, clientName: c.nom, clientAddress: c.adresse || f.clientAddress, clientEmail: c.email || f.clientEmail, clientPhone: c.telephone || f.clientPhone }))
-                          else setForm(f => ({ ...f, clientId: '', clientName: '', clientAddress: '', clientEmail: '', clientPhone: '' }))
-                        }}
-                        style={{ ...inputStyle, backgroundColor: 'white' }}
-                      >
-                        <option value="">— Nouveau client / saisie manuelle —</option>
-                        {clients.map(c => (
-                          <option key={c.id} value={c.id}>{c.nom}{c.entreprise ? ` (${c.entreprise})` : ''}</option>
-                        ))}
-                      </select>
+                    {clients.length > 0 && (
+                      <div>
+                        <label style={labelStyle}>Choisir un client existant</label>
+                        <select value={form.clientId}
+                          onChange={e => {
+                            const c = clients.find(cl => cl.id === e.target.value)
+                            if (c) setForm(f => ({ ...f, clientId: c.id, clientName: c.nom, clientAddress: c.adresse || f.clientAddress, clientEmail: c.email || f.clientEmail, clientPhone: c.telephone || f.clientPhone }))
+                            else setForm(f => ({ ...f, clientId: '', clientName: '', clientAddress: '', clientEmail: '', clientPhone: '' }))
+                          }}
+                          style={{ ...inputStyle, backgroundColor: 'white' }}>
+                          <option value="">— Nouveau client / saisie manuelle —</option>
+                          {clients.map(c => <option key={c.id} value={c.id}>{c.nom}{c.entreprise ? ` (${c.entreprise})` : ''}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={labelStyle}>Nom du client *</label>
+                        <input value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} placeholder="Jean Dupont" style={inputStyle} />
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={labelStyle}>Adresse</label>
+                        <input value={form.clientAddress} onChange={e => setForm(f => ({ ...f, clientAddress: e.target.value }))} placeholder="12 rue des Lilas, 75011 Paris" style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Email</label>
+                        <input value={form.clientEmail} onChange={e => setForm(f => ({ ...f, clientEmail: e.target.value }))} placeholder="client@email.fr" style={inputStyle} type="email" />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Téléphone</label>
+                        <input value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} placeholder="06 00 00 00 00" style={inputStyle} type="tel" />
+                      </div>
                     </div>
-                  )}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={labelStyle}>Nom du client *</label>
-                      <input value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} placeholder="Jean Dupont" style={inputStyle} />
-                    </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={labelStyle}>Adresse</label>
-                      <input value={form.clientAddress} onChange={e => setForm(f => ({ ...f, clientAddress: e.target.value }))} placeholder="12 rue des Lilas, 75011 Paris" style={inputStyle} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Email</label>
-                      <input value={form.clientEmail} onChange={e => setForm(f => ({ ...f, clientEmail: e.target.value }))} placeholder="client@email.fr" style={inputStyle} type="email" />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Téléphone</label>
-                      <input value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} placeholder="06 00 00 00 00" style={inputStyle} type="tel" />
-                    </div>
-                  </div>
                   </div>
                 </div>
 
@@ -415,12 +527,10 @@ export default function DevisPage() {
                 {/* Totals preview */}
                 <div style={{ backgroundColor: '#1e3a5f', borderRadius: '12px', padding: '1.2rem', color: 'white' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Total HT</span>
-                    <span style={{ fontWeight: '600' }}>{fmt(subtotal)}</span>
+                    <span style={{ color: '#94a3b8' }}>Total HT</span><span style={{ fontWeight: '600' }}>{fmt(subtotal)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
-                    <span style={{ color: '#94a3b8' }}>TVA ({form.taxRate}%)</span>
-                    <span style={{ fontWeight: '600' }}>{fmt(tax)}</span>
+                    <span style={{ color: '#94a3b8' }}>TVA ({form.taxRate}%)</span><span style={{ fontWeight: '600' }}>{fmt(tax)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.8rem' }}>
                     <span style={{ fontWeight: '700', fontSize: '1.1rem' }}>TOTAL TTC</span>
@@ -454,39 +564,54 @@ export default function DevisPage() {
             const sc = STATUS_COLORS[selected.status] || STATUS_COLORS.brouillon
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {/* Header */}
+
+                {/* Header card */}
                 <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
                         <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1e3a5f' }}>{selected.clientName}</h2>
                         <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.7rem', borderRadius: '999px', backgroundColor: sc.bg, color: sc.color }}>{STATUS_LABELS[selected.status]}</span>
+                        {selected.locked && (
+                          <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.7rem', borderRadius: '999px', backgroundColor: '#dcfce7', color: '#15803d' }}>✅ Signé électroniquement</span>
+                        )}
                       </div>
                       <div style={{ fontSize: '0.88rem', color: '#64748b' }}>{selected.numero} · {selected.createdAt}</div>
-                      {selected.clientAddress && <div style={{ fontSize: '0.88rem', color: '#64748b' }}>📍 {selected.clientAddress}</div>}
+                      {selected.signedAt && <div style={{ fontSize: '0.82rem', color: '#16a34a', marginTop: '0.2rem' }}>🔒 Signé le {selected.signedAt}</div>}
+                      {selected.clientAddress && <div style={{ fontSize: '0.88rem', color: '#64748b', marginTop: '0.2rem' }}>📍 {selected.clientAddress}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {!selected.locked && (
+                        <button onClick={openSignModal}
+                          style={{ backgroundColor: '#16a34a', color: 'white', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '700' }}>
+                          ✍️ Faire signer
+                        </button>
+                      )}
                       <button onClick={() => setView('print')} style={{ backgroundColor: '#1e3a5f', color: 'white', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600' }}>🖨 Imprimer</button>
-                      <button onClick={() => handleDelete(selected.id)} style={{ backgroundColor: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.6rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>🗑</button>
+                      {!selected.locked && (
+                        <button onClick={() => handleDelete(selected.id)} style={{ backgroundColor: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.6rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>🗑</button>
+                      )}
                     </div>
                   </div>
 
-                  {/* Status change */}
-                  <div style={{ marginTop: '1rem' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: '600', color: '#64748b', marginBottom: '0.5rem' }}>Statut du devis :</div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {Object.entries(STATUS_LABELS).map(([key, label]) => {
-                        const c = STATUS_COLORS[key]
-                        const isActive = selected.status === key
-                        return (
-                          <button key={key} onClick={() => handleStatusChange(selected.id, key)}
-                            style={{ padding: '0.4rem 0.9rem', borderRadius: '6px', border: `1.5px solid ${isActive ? c.color : '#d1d5db'}`, backgroundColor: isActive ? c.bg : 'white', color: isActive ? c.color : '#64748b', cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600', transition: 'all 0.1s' }}>
-                            {label}
-                          </button>
-                        )
-                      })}
+                  {/* Status pills — hidden when locked */}
+                  {!selected.locked && (
+                    <div style={{ marginTop: '1rem' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: '600', color: '#64748b', marginBottom: '0.5rem' }}>Statut du devis :</div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {Object.entries(STATUS_LABELS).map(([key, label]) => {
+                          const c = STATUS_COLORS[key]
+                          const isActive = selected.status === key
+                          return (
+                            <button key={key} onClick={() => handleStatusChange(selected.id, key)}
+                              style={{ padding: '0.4rem 0.9rem', borderRadius: '6px', border: `1.5px solid ${isActive ? c.color : '#d1d5db'}`, backgroundColor: isActive ? c.bg : 'white', color: isActive ? c.color : '#64748b', cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600' }}>
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Items table */}
@@ -510,8 +635,6 @@ export default function DevisPage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Totals */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
                     <div style={{ width: '260px', backgroundColor: '#1e3a5f', borderRadius: '10px', padding: '1rem', color: 'white' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
@@ -527,12 +650,60 @@ export default function DevisPage() {
                   </div>
                 </div>
 
+                {/* Notes */}
                 {selected.notes && (
                   <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
                     <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e3a5f', marginBottom: '0.5rem' }}>Notes</h3>
                     <p style={{ fontSize: '0.9rem', color: '#374151' }}>{selected.notes}</p>
                   </div>
                 )}
+
+                {/* Signatures display */}
+                {selected.locked && selected.artisanSignature && selected.clientSignature && (
+                  <div style={{ backgroundColor: '#f0fdf4', border: '2px solid #bbf7d0', borderRadius: '14px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#15803d', marginBottom: '1rem' }}>✍️ Signatures électroniques</h3>
+                    <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: '160px' }}>
+                        <p style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748b', marginBottom: '0.4rem' }}>Artisan — {selected.artisanName}</p>
+                        <img src={selected.artisanSignature} alt="Signature artisan" style={{ width: '100%', maxWidth: '260px', height: '80px', objectFit: 'contain', border: '1px solid #d1fae5', borderRadius: '8px', backgroundColor: 'white' }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: '160px' }}>
+                        <p style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748b', marginBottom: '0.4rem' }}>Client — {selected.clientName}</p>
+                        <img src={selected.clientSignature} alt="Signature client" style={{ width: '100%', maxWidth: '260px', height: '80px', objectFit: 'contain', border: '1px solid #d1fae5', borderRadius: '8px', backgroundColor: 'white' }} />
+                      </div>
+                    </div>
+                    {selected.signedAt && <p style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '0.75rem' }}>Signé le {selected.signedAt}</p>}
+                  </div>
+                )}
+
+                {/* CGU section */}
+                <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e3a5f' }}>📋 Conditions Générales de Vente</h3>
+                    {!cguEditing && (
+                      <button onClick={() => { setCguDraft(settings.cgu); setCguEditing(true) }}
+                        style={{ backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '0.3rem 0.7rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600' }}>
+                        ✏️ Modifier mes CGV
+                      </button>
+                    )}
+                  </div>
+                  {cguEditing ? (
+                    <div>
+                      <textarea value={cguDraft} onChange={e => setCguDraft(e.target.value)} rows={10}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', border: '1.5px solid #d1d5db', fontSize: '0.82rem', lineHeight: 1.6, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }} />
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                        <button onClick={() => { persistSettings({ cgu: cguDraft }); setCguEditing(false); toast3('✅ CGV mises à jour') }}
+                          style={{ backgroundColor: '#d97706', color: 'white', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '0.88rem' }}>Enregistrer</button>
+                        <button onClick={() => setCguEditing(false)}
+                          style={{ backgroundColor: 'white', color: '#64748b', border: '1px solid #e2e8f0', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>Annuler</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', whiteSpace: 'pre-wrap', lineHeight: 1.6, maxHeight: '200px', overflowY: 'auto', backgroundColor: '#f8fafc', borderRadius: '8px', padding: '0.75rem' }}>
+                      {settings.cgu}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })()}
@@ -554,11 +725,10 @@ export default function DevisPage() {
         </div>
       </div>
 
-      {/* Catalogue picker modal */}
+      {/* ── Catalogue picker modal ── */}
       {showCatPicker && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 400, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '680px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-            {/* Picker header */}
             <div style={{ padding: '1.5rem 1.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
                 <h3 style={{ fontWeight: '800', color: '#1e3a5f', fontSize: '1.1rem' }}>📖 Choisir du catalogue</h3>
@@ -575,50 +745,119 @@ export default function DevisPage() {
                 ))}
               </div>
             </div>
-            {/* Picker list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.5rem 1.5rem' }}>
-              {catalogue
-                .filter(item => {
-                  if (catTypeFilter !== 'tous' && item.type !== catTypeFilter) return false
-                  if (!catSearch) return true
-                  const q = catSearch.toLowerCase()
-                  return item.name.toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
-                })
-                .map(item => {
-                  const CAT_COLORS = { isolation: '#2563eb', chauffage: '#ea580c', electricite: '#ca8a04', plomberie: '#0891b2', menuiserie: '#7c3aed', autre: '#64748b' }
-                  const CAT_BG    = { isolation: '#dbeafe', chauffage: '#ffedd5', electricite: '#fef9c3', plomberie: '#cffafe', menuiserie: '#ede9fe', autre: '#f1f5f9' }
-                  const CAT_ICONS = { isolation: '🏠', chauffage: '🔥', electricite: '⚡', plomberie: '💧', menuiserie: '🪵', autre: '🔧' }
-                  const color = CAT_COLORS[item.category] || '#64748b'
-                  const bg    = CAT_BG[item.category]    || '#f1f5f9'
-                  const icon  = CAT_ICONS[item.category] || '🔧'
-                  return (
-                    <button key={item.id} onClick={() => selectFromCatalogue(item)}
-                      style={{ width: '100%', textAlign: 'left', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.85rem 1rem', marginBottom: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.8rem', transition: 'border-color 0.15s' }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = color}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                      <div style={{ width: '40px', height: '40px', backgroundColor: bg, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>{icon}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.9rem', marginBottom: '0.1rem' }}>{item.name}</p>
-                        {item.description && <p style={{ fontSize: '0.76rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</p>}
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <p style={{ fontWeight: '800', color: color, fontSize: '1rem' }}>{item.unitPrice} €</p>
-                        <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/ {item.unit}</p>
-                      </div>
-                    </button>
-                  )
-                })
-              }
+              {catalogue.filter(item => {
+                if (catTypeFilter !== 'tous' && item.type !== catTypeFilter) return false
+                if (!catSearch) return true
+                const q = catSearch.toLowerCase()
+                return item.name.toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
+              }).map(item => {
+                const CAT_COLORS = { isolation: '#2563eb', chauffage: '#ea580c', electricite: '#ca8a04', plomberie: '#0891b2', menuiserie: '#7c3aed', autre: '#64748b' }
+                const CAT_BG = { isolation: '#dbeafe', chauffage: '#ffedd5', electricite: '#fef9c3', plomberie: '#cffafe', menuiserie: '#ede9fe', autre: '#f1f5f9' }
+                const CAT_ICONS = { isolation: '🏠', chauffage: '🔥', electricite: '⚡', plomberie: '💧', menuiserie: '🪵', autre: '🔧' }
+                const color = CAT_COLORS[item.category] || '#64748b'
+                const bg = CAT_BG[item.category] || '#f1f5f9'
+                const icon = CAT_ICONS[item.category] || '🔧'
+                return (
+                  <button key={item.id} onClick={() => selectFromCatalogue(item)}
+                    style={{ width: '100%', textAlign: 'left', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.85rem 1rem', marginBottom: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.8rem' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = color}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                    <div style={{ width: '40px', height: '40px', backgroundColor: bg, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>{icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.9rem', marginBottom: '0.1rem' }}>{item.name}</p>
+                      {item.description && <p style={{ fontSize: '0.76rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</p>}
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <p style={{ fontWeight: '800', color: color, fontSize: '1rem' }}>{item.unitPrice} €</p>
+                      <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/ {item.unit}</p>
+                    </div>
+                  </button>
+                )
+              })}
               {catalogue.filter(item => {
                 if (catTypeFilter !== 'tous' && item.type !== catTypeFilter) return false
                 if (!catSearch) return true
                 const q = catSearch.toLowerCase()
                 return item.name.toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
               }).length === 0 && (
-                <p style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>Aucun résultat. Essayez un autre mot-clé.</p>
+                <p style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>Aucun résultat.</p>
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Signature modal ── */}
+      {showSignModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '540px', maxHeight: '92vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1e3a5f' }}>
+                ✍️ {signStep === 1 ? 'Étape 1 — Signature artisan' : 'Étape 2 — Signature client'}
+              </h2>
+              <button onClick={() => { setShowSignModal(false); setSignStep(1) }}
+                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+              {[1, 2].map(s => (
+                <div key={s} style={{ flex: 1, height: '6px', borderRadius: '3px', backgroundColor: s <= signStep ? '#d97706' : '#e2e8f0', transition: 'background-color 0.3s' }} />
+              ))}
+            </div>
+
+            {signStep === 1 && (
+              <div>
+                <p style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '1rem' }}>
+                  Signez dans le cadre ci-dessous. Votre signature sera mémorisée pour les prochains documents.
+                </p>
+                <SignaturePad ref={artisanPadRef} label="Votre signature (artisan)" height={160} />
+                {settings.artisanSignature && (
+                  <button onClick={() => artisanPadRef.current?.loadDataURL(settings.artisanSignature)}
+                    style={{ marginTop: '0.5rem', background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.8rem', fontSize: '0.8rem', color: '#64748b', cursor: 'pointer' }}>
+                    ↩ Utiliser ma signature enregistrée
+                  </button>
+                )}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.2rem' }}>
+                  <button onClick={() => artisanPadRef.current?.clear()}
+                    style={{ backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '0.65rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>
+                    🗑 Effacer
+                  </button>
+                  <button onClick={handleArtisanSign}
+                    style={{ flex: 1, backgroundColor: '#1e3a5f', color: 'white', border: 'none', padding: '0.75rem', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '0.95rem' }}>
+                    Continuer → Signature client
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {signStep === 2 && (
+              <div>
+                <p style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '1rem' }}>
+                  Le client signe ci-dessous pour valider le devis. Le document sera verrouillé définitivement.
+                </p>
+                <SignaturePad ref={clientPadRef} label={`Signature du client — ${selected?.clientName}`} height={160} />
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.2rem' }}>
+                  <button onClick={() => clientPadRef.current?.clear()}
+                    style={{ backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '0.65rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem' }}>
+                    🗑 Effacer
+                  </button>
+                  <button onClick={handleClientSign}
+                    style={{ flex: 1, backgroundColor: '#16a34a', color: 'white', border: 'none', padding: '0.75rem', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '0.95rem' }}>
+                    🔒 Valider et verrouiller le devis
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#1e3a5f', color: 'white', padding: '0.75rem 1.5rem', borderRadius: '12px', fontWeight: '600', zIndex: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
+          {toast}
         </div>
       )}
 
