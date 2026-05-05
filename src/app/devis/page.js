@@ -32,6 +32,7 @@ function saveDevis(list) {
 }
 
 const emptyForm = () => ({
+  clientId: '',
   clientName: '',
   clientAddress: '',
   clientEmail: '',
@@ -48,6 +49,7 @@ export default function DevisPage() {
   const router = useRouter()
   const [user, setUser] = useState(null)
   const [devisList, setDevisList] = useState([])
+  const [clients, setClients] = useState([])
   const [view, setView] = useState('list') // 'list' | 'create' | 'detail' | 'print'
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(emptyForm())
@@ -58,6 +60,7 @@ export default function DevisPage() {
     if (!stored) { router.push('/login'); return }
     setUser(JSON.parse(stored))
     setDevisList(loadDevis())
+    setClients(JSON.parse(localStorage.getItem('renovexpert_clients') || '[]'))
   }, [router])
 
   const persistAndSet = (updated) => { saveDevis(updated); setDevisList(updated) }
@@ -87,6 +90,7 @@ export default function DevisPage() {
       numero: generateNumero(devisList),
       artisanName: user.name,
       artisanCompany: user.company,
+      clientId: form.clientId || undefined,
       ...form,
       laborCost: parseFloat(form.laborCost) || 0,
       items: form.items.map(it => ({ ...it, quantity: parseFloat(it.quantity) || 0, unitPrice: parseFloat(it.unitPrice) || 0 })),
@@ -288,6 +292,26 @@ export default function DevisPage() {
                 {/* Client info */}
                 <div style={{ padding: '1.2rem', backgroundColor: '#f8fafc', borderRadius: '10px' }}>
                   <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e3a5f', marginBottom: '1rem' }}>👤 Informations client</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  {clients.length > 0 && (
+                    <div>
+                      <label style={labelStyle}>Choisir un client existant</label>
+                      <select
+                        value={form.clientId}
+                        onChange={e => {
+                          const c = clients.find(cl => cl.id === e.target.value)
+                          if (c) setForm(f => ({ ...f, clientId: c.id, clientName: c.nom, clientAddress: c.adresse || f.clientAddress, clientEmail: c.email || f.clientEmail, clientPhone: c.telephone || f.clientPhone }))
+                          else setForm(f => ({ ...f, clientId: '', clientName: '', clientAddress: '', clientEmail: '', clientPhone: '' }))
+                        }}
+                        style={{ ...inputStyle, backgroundColor: 'white' }}
+                      >
+                        <option value="">— Nouveau client / saisie manuelle —</option>
+                        {clients.map(c => (
+                          <option key={c.id} value={c.id}>{c.nom}{c.entreprise ? ` (${c.entreprise})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={labelStyle}>Nom du client *</label>
@@ -305,6 +329,7 @@ export default function DevisPage() {
                       <label style={labelStyle}>Téléphone</label>
                       <input value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} placeholder="06 00 00 00 00" style={inputStyle} type="tel" />
                     </div>
+                  </div>
                   </div>
                 </div>
 

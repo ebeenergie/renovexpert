@@ -78,6 +78,7 @@ interface UploadedFile {
 
 interface Dossier {
   id: string
+  clientId?: string
   clientName: string
   address: string
   workType: string
@@ -90,11 +91,19 @@ interface Dossier {
 }
 
 interface DossierForm {
+  clientId: string
   clientName: string
   address: string
   workType: string
   type: DossierType
   artisanName: string
+}
+
+interface StoredClient {
+  id: string
+  nom: string
+  entreprise?: string
+  adresse?: string
 }
 
 interface StoredUser {
@@ -146,9 +155,10 @@ export default function DossiersPage() {
   const router = useRouter()
   const [user, setUser] = useState<StoredUser | null>(null)
   const [dossiers, setDossiers] = useState<Dossier[]>([])
+  const [clients, setClients] = useState<StoredClient[]>([])
   const [view, setView] = useState<View>('list')
   const [selected, setSelected] = useState<Dossier | null>(null)
-  const [form, setForm] = useState<DossierForm>({ clientName: '', address: '', workType: WORK_TYPES[0], type: 'MPR', artisanName: '' })
+  const [form, setForm] = useState<DossierForm>({ clientId: '', clientName: '', address: '', workType: WORK_TYPES[0], type: 'MPR', artisanName: '' })
   const [formError, setFormError] = useState('')
   const [uploadError, setUploadError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -160,6 +170,7 @@ export default function DossiersPage() {
     setUser(u)
     setForm(f => ({ ...f, artisanName: u.name }))
     setDossiers(loadDossiers())
+    setClients(JSON.parse(localStorage.getItem('renovexpert_clients') || '[]'))
   }, [router])
 
   const persistAndSet = (updated: Dossier[]) => {
@@ -176,6 +187,7 @@ export default function DossiersPage() {
     if (!form.address.trim()) { setFormError("L'adresse est requise."); return }
     const newDossier: Dossier = {
       id: generateId(),
+      clientId: form.clientId || undefined,
       clientName: form.clientName.trim(),
       address: form.address.trim(),
       workType: form.workType,
@@ -190,7 +202,7 @@ export default function DossiersPage() {
     persistAndSet(updated)
     setSelected(newDossier)
     setView('detail')
-    setForm(f => ({ ...f, clientName: '', address: '' }))
+    setForm(f => ({ ...f, clientId: '', clientName: '', address: '' }))
     setFormError('')
   }
 
@@ -343,6 +355,25 @@ export default function DossiersPage() {
                     })}
                   </div>
                 </div>
+                {clients.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>Choisir un client existant</label>
+                    <select
+                      value={form.clientId}
+                      onChange={(e) => {
+                        const c = clients.find((cl) => cl.id === e.target.value)
+                        if (c) setForm((f) => ({ ...f, clientId: c.id, clientName: c.nom, address: c.adresse || f.address }))
+                        else setForm((f) => ({ ...f, clientId: '', clientName: '', address: '' }))
+                      }}
+                      style={{ ...inputStyle, backgroundColor: 'white' }}
+                    >
+                      <option value="">— Nouveau client / saisie manuelle —</option>
+                      {clients.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nom}{c.entreprise ? ` (${c.entreprise})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label style={labelStyle}>Nom du client *</label>
                   <input value={form.clientName} onChange={(e) => setForm((f) => ({ ...f, clientName: e.target.value }))} placeholder="Ex : Jean Dupont" style={inputStyle} />
