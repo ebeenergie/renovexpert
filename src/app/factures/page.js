@@ -45,6 +45,23 @@ export default function FacturesPage() {
     setFactures(checked)
     localStorage.setItem('renovexpert_factures', JSON.stringify(checked))
     setDevis(JSON.parse(localStorage.getItem('renovexpert_devis') || '[]'))
+
+    const params = new URLSearchParams(window.location.search)
+    const cId = params.get('clientId')
+    const cName = params.get('clientName')
+    const cAddr = params.get('clientAddress')
+    if (cId && cName) {
+      setForm({
+        ...blank,
+        id: Date.now().toString(),
+        number: nextNumber(checked),
+        clientId: cId,
+        clientName: cName,
+        clientAddress: cAddr || '',
+      })
+      setEditId(null)
+      setShowForm(true)
+    }
   }, [router])
 
   function save(list) { setFactures(list); localStorage.setItem('renovexpert_factures', JSON.stringify(list)) }

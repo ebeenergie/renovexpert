@@ -195,6 +195,11 @@ export default function ClientsPage() {
                           <option value="actif">Client actif</option>
                           <option value="termine">Terminé</option>
                         </select>
+                        <button
+                          onClick={() => router.push(`/factures?clientId=${client.id}&clientName=${encodeURIComponent(client.nom)}&clientAddress=${encodeURIComponent(client.adresse || '')}`)}
+                          style={{ backgroundColor: '#dcfce7', color: '#16a34a', border: '1.5px solid #bbf7d0', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+                          💰 Nouvelle facture
+                        </button>
                         <button onClick={() => openEdit(client)} style={{ backgroundColor: '#f1f5f9', color: '#374151', border: '1.5px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>✏️ Modifier</button>
                         <button onClick={() => deleteClient(client.id)} style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>🗑️ Supprimer</button>
                       </div>
