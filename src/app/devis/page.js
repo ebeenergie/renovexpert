@@ -59,8 +59,24 @@ export default function DevisPage() {
     const stored = localStorage.getItem('renovexpert_user')
     if (!stored) { router.push('/login'); return }
     setUser(JSON.parse(stored))
-    setDevisList(loadDevis())
+    const list = loadDevis()
+    setDevisList(list)
     setClients(JSON.parse(localStorage.getItem('renovexpert_clients') || '[]'))
+
+    const params = new URLSearchParams(window.location.search)
+    const cId = params.get('clientId')
+    const cName = params.get('clientName')
+    if (cId && cName) {
+      setForm({
+        ...emptyForm(),
+        clientId: cId,
+        clientName: cName,
+        clientAddress: params.get('clientAddress') || '',
+        clientEmail: params.get('clientEmail') || '',
+        clientPhone: params.get('clientPhone') || '',
+      })
+      setView('create')
+    }
   }, [router])
 
   const persistAndSet = (updated) => { saveDevis(updated); setDevisList(updated) }

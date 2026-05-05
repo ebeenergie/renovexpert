@@ -196,6 +196,11 @@ export default function ClientsPage() {
                           <option value="termine">Terminé</option>
                         </select>
                         <button
+                          onClick={() => router.push(`/devis?clientId=${client.id}&clientName=${encodeURIComponent(client.nom)}&clientAddress=${encodeURIComponent(client.adresse || '')}&clientEmail=${encodeURIComponent(client.email || '')}&clientPhone=${encodeURIComponent(client.telephone || '')}`)}
+                          style={{ backgroundColor: '#dbeafe', color: '#2563eb', border: '1.5px solid #bfdbfe', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+                          📄 Nouveau devis
+                        </button>
+                        <button
                           onClick={() => router.push(`/factures?clientId=${client.id}&clientName=${encodeURIComponent(client.nom)}&clientAddress=${encodeURIComponent(client.adresse || '')}`)}
                           style={{ backgroundColor: '#dcfce7', color: '#16a34a', border: '1.5px solid #bbf7d0', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
                           💰 Nouvelle facture
