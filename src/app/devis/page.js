@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import BottomNav from '../components/BottomNav'
 import SignaturePad from '../components/SignaturePad'
+import EmailModal from '../components/EmailModal'
 
 const STORAGE_KEY = 'renovexpert_devis'
 const SETTINGS_KEY = 'renovexpert_settings'
@@ -101,6 +102,10 @@ export default function DevisPage() {
   const [cguEditing, setCguEditing] = useState(false)
   const [cguDraft, setCguDraft] = useState('')
 
+  // Email
+  const [showEmail, setShowEmail] = useState(false)
+  const [emailData, setEmailData] = useState({ to: '', subject: '', body: '' })
+
   // Signing
   const [showSignModal, setShowSignModal] = useState(false)
   const [signStep, setSignStep] = useState(1)
@@ -141,6 +146,39 @@ export default function DevisPage() {
     const updated = { ...settings, ...patch }
     setSettings(updated)
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated))
+  }
+
+  function openEmail(d) {
+    const sub = calcSubtotal(d.items, d.laborCost)
+    const tx = calcTax(sub, d.taxRate)
+    const tot = calcTotal(sub, tx)
+    const artisan = JSON.parse(localStorage.getItem('renovexpert_user') || '{}')
+    setEmailData({
+      to: d.clientEmail || '',
+      subject: `Devis ${d.numero} — ${artisan.company || d.artisanCompany}`,
+      body: `Bonjour ${d.clientName},
+
+Veuillez trouver ci-dessous notre devis ${d.numero} en date du ${d.createdAt}.
+
+──────────────────────────────────
+DEVIS N° ${d.numero}
+──────────────────────────────────
+Client      : ${d.clientName}${d.clientAddress ? '\nAdresse     : ' + d.clientAddress : ''}
+Date        : ${d.createdAt}
+Objet       : ${d.workDescription}
+
+Total HT    : ${fmt(sub)}
+TVA (${d.taxRate}%)  : ${fmt(tx)}
+Total TTC   : ${fmt(tot)}
+──────────────────────────────────
+
+Ce devis est valable 30 jours. Pour l'accepter, merci de nous le retourner signé avec la mention "Bon pour accord".
+
+Cordialement,
+${artisan.name || d.artisanName}
+${artisan.company || d.artisanCompany}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.email ? '\n' + artisan.email : ''}`,
+    })
+    setShowEmail(true)
   }
 
   function openSignModal() {
@@ -587,6 +625,7 @@ export default function DevisPage() {
                           ✍️ Faire signer
                         </button>
                       )}
+                      <button onClick={() => openEmail(selected)} style={{ backgroundColor: '#0891b2', color: 'white', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600' }}>📧 Envoyer</button>
                       <button onClick={() => setView('print')} style={{ backgroundColor: '#1e3a5f', color: 'white', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600' }}>🖨 Imprimer</button>
                       {!selected.locked && (
                         <button onClick={() => handleDelete(selected.id)} style={{ backgroundColor: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.6rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>🗑</button>
@@ -786,6 +825,20 @@ export default function DevisPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Email modal ── */}
+      {showEmail && (
+        <EmailModal
+          to={emailData.to}
+          subject={emailData.subject}
+          body={emailData.body}
+          onClose={() => setShowEmail(false)}
+          onSend={() => {
+            if (selected && selected.status === 'brouillon') handleStatusChange(selected.id, 'envoye')
+            toast3('📧 Messagerie ouverte — pensez à joindre le PDF')
+          }}
+        />
       )}
 
       {/* ── Signature modal ── */}

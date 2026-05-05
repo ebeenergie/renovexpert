@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '../components/BottomNav'
 import SignaturePad from '../components/SignaturePad'
+import EmailModal from '../components/EmailModal'
 
 const SETTINGS_KEY = 'renovexpert_settings'
 
@@ -71,6 +72,10 @@ export default function FacturesPage() {
   const [settings, setSettings] = useState({ cgu: DEFAULT_CGU, artisanSignature: null })
   const [cguEditing, setCguEditing] = useState(false)
   const [cguDraft, setCguDraft] = useState('')
+
+  // Email
+  const [showEmail, setShowEmail] = useState(false)
+  const [emailData, setEmailData] = useState({ to: '', subject: '', body: '' })
 
   // Signing
   const [showSignModal, setShowSignModal] = useState(false)
@@ -142,6 +147,42 @@ export default function FacturesPage() {
   function markSent(id) {
     save(factures.map(f => f.id === id && !f.locked ? { ...f, status: 'envoyee' } : f))
     toast3('📤 Facture marquée envoyée')
+  }
+
+  function openEmail(fac) {
+    const artisan = JSON.parse(localStorage.getItem('renovexpert_user') || '{}')
+    const ht = parseFloat(fac.amount) || 0
+    const tvaAmt = ht * (parseFloat(fac.tva) || 0) / 100
+    const ttcAmt = ht + tvaAmt
+    const clients = JSON.parse(localStorage.getItem('renovexpert_clients') || '[]')
+    const client = clients.find(c => c.id === fac.clientId)
+    const clientEmail = client?.email || ''
+    setEmailData({
+      _facId: fac.id,
+      to: clientEmail,
+      subject: `Facture ${fac.number} — ${artisan.company || ''}`,
+      body: `Bonjour ${fac.clientName},
+
+Veuillez trouver ci-dessous notre facture ${fac.number} en date du ${fac.dateEmission}.
+
+──────────────────────────────────
+FACTURE N° ${fac.number}
+──────────────────────────────────
+Client      : ${fac.clientName}
+Date        : ${fac.dateEmission}${fac.dateEcheance ? '\nÉchéance    : ' + fac.dateEcheance : ''}${fac.devisRef ? '\nRéf. devis  : ' + fac.devisRef : ''}
+
+Montant HT  : ${ht.toFixed(2)} €
+TVA (${fac.tva}%)  : ${tvaAmt.toFixed(2)} €
+Total TTC   : ${ttcAmt.toFixed(2)} €
+──────────────────────────────────${fac.notes ? '\n\nObjet : ' + fac.notes : ''}
+
+Règlement à effectuer à réception${fac.dateEcheance ? ' avant le ' + fac.dateEcheance : ''}.
+
+Cordialement,
+${artisan.name || ''}
+${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.email ? '\n' + artisan.email : ''}`,
+    })
+    setShowEmail(true)
   }
 
   function openSignModal(fac) {
@@ -298,6 +339,7 @@ export default function FacturesPage() {
                     {!fac.locked && fac.status === 'brouillon' && (
                       <button onClick={() => markSent(fac.id)} style={{ backgroundColor: '#dbeafe', color: '#2563eb', border: '1.5px solid #bfdbfe', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem' }}>📤 Marquer envoyée</button>
                     )}
+                    <button onClick={() => openEmail(fac)} style={{ backgroundColor: '#e0f2fe', color: '#0891b2', border: '1.5px solid #bae6fd', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem' }}>📧 Envoyer</button>
                     <button onClick={() => setPrintFac(fac)} style={{ backgroundColor: '#f1f5f9', color: '#475569', border: '1.5px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem' }}>🖨️ Imprimer</button>
                     {!fac.locked && (
                       <button onClick={() => openSignModal(fac)} style={{ backgroundColor: '#fef3c7', color: '#d97706', border: '1.5px solid #fde68a', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem' }}>✍️ Faire signer</button>
@@ -492,6 +534,20 @@ export default function FacturesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Email modal ── */}
+      {showEmail && (
+        <EmailModal
+          to={emailData.to}
+          subject={emailData.subject}
+          body={emailData.body}
+          onClose={() => setShowEmail(false)}
+          onSend={() => {
+            markSent(emailData._facId)
+            toast3('📧 Messagerie ouverte — pensez à joindre le PDF')
+          }}
+        />
       )}
 
       {/* ── Signature modal ── */}
