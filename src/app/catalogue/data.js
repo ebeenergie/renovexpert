@@ -1,0 +1,43 @@
+export const CATEGORIES = {
+  isolation:   { label: 'Isolation',    color: '#2563eb', bg: '#dbeafe', icon: '🏠' },
+  chauffage:   { label: 'Chauffage',    color: '#ea580c', bg: '#ffedd5', icon: '🔥' },
+  electricite: { label: 'Électricité',  color: '#ca8a04', bg: '#fef9c3', icon: '⚡' },
+  plomberie:   { label: 'Plomberie',    color: '#0891b2', bg: '#cffafe', icon: '💧' },
+  menuiserie:  { label: 'Menuiserie',   color: '#7c3aed', bg: '#ede9fe', icon: '🪵' },
+  autre:       { label: 'Autre',        color: '#64748b', bg: '#f1f5f9', icon: '🔧' },
+}
+
+export const UNITS = ['h', 'm²', 'ml', 'm³', 'forfait', 'unité', 'kg', 'L', 'rouleau']
+
+export const PRESET_CATALOGUE = [
+  { id: 'p1',  type: 'service', category: 'isolation',   name: 'Isolation combles perdus',           description: 'Soufflage ou pose de laine de verre/cellulose en combles perdus', unitPrice: 25,   unit: 'm²'    },
+  { id: 'p2',  type: 'service', category: 'isolation',   name: "Isolation par l'extérieur (ITE)",    description: "Isolation thermique extérieure avec enduit de finition",           unitPrice: 85,   unit: 'm²'    },
+  { id: 'p3',  type: 'service', category: 'isolation',   name: "Isolation par l'intérieur (ITI)",    description: 'Doublage murs avec laine minérale et plaques de plâtre BA13',     unitPrice: 48,   unit: 'm²'    },
+  { id: 'p4',  type: 'service', category: 'isolation',   name: 'Isolation plancher bas',             description: 'Pose de panneaux isolants sous plancher bas sur vide sanitaire',  unitPrice: 22,   unit: 'm²'    },
+  { id: 'p5',  type: 'service', category: 'isolation',   name: "Main d'œuvre isolation",             description: 'Pose et mise en œuvre des matériaux isolants',                    unitPrice: 35,   unit: 'h'     },
+  { id: 'p6',  type: 'service', category: 'chauffage',   name: 'Installation PAC air/eau',           description: 'Fourniture et pose pompe à chaleur air/eau + raccordements',       unitPrice: 1500, unit: 'forfait'},
+  { id: 'p7',  type: 'service', category: 'chauffage',   name: 'Installation chaudière biomasse',    description: 'Fourniture et pose chaudière à granulés de bois homologuée',       unitPrice: 2200, unit: 'forfait'},
+  { id: 'p8',  type: 'service', category: 'chauffage',   name: 'Installation VMC double flux',       description: "Pose d'une ventilation mécanique contrôlée double flux",           unitPrice: 950,  unit: 'forfait'},
+  { id: 'p9',  type: 'service', category: 'chauffage',   name: 'Chauffe-eau thermodynamique',        description: "Fourniture et installation d'un chauffe-eau thermodynamique",      unitPrice: 1200, unit: 'forfait'},
+  { id: 'p10', type: 'service', category: 'chauffage',   name: "Main d'œuvre chauffage",             description: 'Installation et raccordement équipements de chauffage',            unitPrice: 75,   unit: 'h'     },
+  { id: 'p11', type: 'service', category: 'electricite', name: 'Tableau électrique neuf',            description: 'Fourniture et pose tableau électrique NF C15-100',                 unitPrice: 650,  unit: 'forfait'},
+  { id: 'p12', type: 'service', category: 'electricite', name: 'Mise aux normes électricité',        description: 'Réfection installation électrique vétuste',                        unitPrice: 65,   unit: 'h'     },
+  { id: 'p13', type: 'service', category: 'electricite', name: 'Installation radiateur électrique',  description: 'Pose et raccordement radiateur électrique à inertie',              unitPrice: 220,  unit: 'unité' },
+  { id: 'p14', type: 'service', category: 'electricite', name: "Main d'œuvre électricité",           description: "Travaux d'installation et câblage électrique",                    unitPrice: 65,   unit: 'h'     },
+  { id: 'p15', type: 'service', category: 'plomberie',   name: 'Remplacement chauffe-eau',           description: 'Dépose ancien appareil et pose chauffe-eau électrique neuf',       unitPrice: 500,  unit: 'forfait'},
+  { id: 'p16', type: 'service', category: 'plomberie',   name: 'Réparation fuite',                   description: 'Recherche et réparation de fuite sur canalisation',               unitPrice: 85,   unit: 'h'     },
+  { id: 'p17', type: 'service', category: 'plomberie',   name: 'Installation sanitaires',            description: 'Pose et raccordement WC, lavabo, douche, baignoire',              unitPrice: 70,   unit: 'h'     },
+  { id: 'p18', type: 'service', category: 'plomberie',   name: "Main d'œuvre plomberie",             description: 'Travaux de plomberie et de tuyauterie',                            unitPrice: 70,   unit: 'h'     },
+  { id: 'p19', type: 'service', category: 'menuiserie',  name: 'Remplacement fenêtre DV',            description: 'Dépose et pose fenêtre double vitrage PVC ou aluminium',           unitPrice: 380,  unit: 'unité' },
+  { id: 'p20', type: 'service', category: 'menuiserie',  name: "Remplacement porte d'entrée",        description: "Dépose et pose porte d'entrée isolante",                           unitPrice: 680,  unit: 'unité' },
+  { id: 'p21', type: 'service', category: 'menuiserie',  name: 'Pose volets roulants électriques',   description: 'Fourniture et installation volets roulants motorisés',              unitPrice: 480,  unit: 'unité' },
+  { id: 'p22', type: 'service', category: 'menuiserie',  name: "Main d'œuvre menuiserie",            description: 'Pose et ajustage menuiseries intérieures et extérieures',          unitPrice: 55,   unit: 'h'     },
+  { id: 'p23', type: 'product', category: 'isolation',   name: 'Laine de verre 200mm',               description: 'Rouleau laine de verre soufflée haute performance',                unitPrice: 8,    unit: 'm²',    reference: 'LV-200',  supplier: 'Isover'   },
+  { id: 'p24', type: 'product', category: 'isolation',   name: 'Laine de roche 100mm',               description: 'Panneau laine de roche rigide Confort',                            unitPrice: 14,   unit: 'm²',    reference: 'LR-100',  supplier: 'Rockwool' },
+  { id: 'p25', type: 'product', category: 'isolation',   name: 'Pare-vapeur 150µ',                   description: 'Film polyéthylène pare-vapeur combles et murs',                   unitPrice: 2.5,  unit: 'm²',    reference: 'PV-150',  supplier: ''         },
+  { id: 'p26', type: 'product', category: 'isolation',   name: 'Mousse polyuréthane expansive',      description: 'Mousse expansive pour comblements et calfeutrage',                 unitPrice: 8,    unit: 'unité', reference: 'PU-750',  supplier: ''         },
+  { id: 'p27', type: 'product', category: 'plomberie',   name: 'Tuyau PVC évacuation Ø100',          description: 'Tuyau PVC rigide pour évacuation eaux usées',                      unitPrice: 9,    unit: 'ml',    reference: 'PVC-100', supplier: ''         },
+  { id: 'p28', type: 'product', category: 'plomberie',   name: 'Tube cuivre Ø16',                    description: 'Tube cuivre écroui pour eau chaude/froide',                        unitPrice: 4.5,  unit: 'ml',    reference: 'CU-16',   supplier: ''         },
+  { id: 'p29', type: 'product', category: 'electricite', name: 'Câble électrique 2,5mm²',            description: 'Câble rigide H07V-U pour circuits prises 16A',                     unitPrice: 1.8,  unit: 'ml',    reference: 'CAB-2.5', supplier: ''         },
+  { id: 'p30', type: 'product', category: 'electricite', name: 'Câble électrique 1,5mm²',            description: 'Câble rigide H07V-U pour circuits éclairage',                      unitPrice: 1.2,  unit: 'ml',    reference: 'CAB-1.5', supplier: ''         },
+]

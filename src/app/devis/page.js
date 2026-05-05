@@ -50,6 +50,10 @@ export default function DevisPage() {
   const [user, setUser] = useState(null)
   const [devisList, setDevisList] = useState([])
   const [clients, setClients] = useState([])
+  const [catalogue, setCatalogue] = useState([])
+  const [showCatPicker, setShowCatPicker] = useState(false)
+  const [catSearch, setCatSearch] = useState('')
+  const [catTypeFilter, setCatTypeFilter] = useState('tous')
   const [view, setView] = useState('list') // 'list' | 'create' | 'detail' | 'print'
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(emptyForm())
@@ -62,6 +66,8 @@ export default function DevisPage() {
     const list = loadDevis()
     setDevisList(list)
     setClients(JSON.parse(localStorage.getItem('renovexpert_clients') || '[]'))
+    const cat = localStorage.getItem('renovexpert_catalogue')
+    if (cat) setCatalogue(JSON.parse(cat))
 
     const params = new URLSearchParams(window.location.search)
     const cId = params.get('clientId')
@@ -95,6 +101,11 @@ export default function DevisPage() {
 
   // Item management
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { id: generateId(), description: '', quantity: 1, unitPrice: 0 }] }))
+  const selectFromCatalogue = (catItem) => {
+    setForm(f => ({ ...f, items: [...f.items, { id: generateId(), description: catItem.name + (catItem.description ? ` — ${catItem.description}` : ''), quantity: 1, unitPrice: catItem.unitPrice }] }))
+    setShowCatPicker(false)
+    setCatSearch('')
+  }
   const removeItem = (id) => setForm(f => ({ ...f, items: f.items.filter(it => it.id !== id) }))
   const updateItem = (id, field, value) => setForm(f => ({ ...f, items: f.items.map(it => it.id === id ? { ...it, [field]: value } : it) }))
 
@@ -357,9 +368,17 @@ export default function DevisPage() {
 
                 {/* Line items */}
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <label style={{ ...labelStyle, marginBottom: 0 }}>🔧 Fournitures & matériaux</label>
-                    <button onClick={addItem} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>+ Ajouter une ligne</button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {catalogue.length > 0 && (
+                        <button onClick={() => { setShowCatPicker(true); setCatSearch(''); setCatTypeFilter('tous') }}
+                          style={{ backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>
+                          📖 Du catalogue
+                        </button>
+                      )}
+                      <button onClick={addItem} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>+ Ligne vide</button>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 110px 40px', gap: '0.5rem' }}>
@@ -534,6 +553,74 @@ export default function DevisPage() {
           )}
         </div>
       </div>
+
+      {/* Catalogue picker modal */}
+      {showCatPicker && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 400, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '680px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            {/* Picker header */}
+            <div style={{ padding: '1.5rem 1.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                <h3 style={{ fontWeight: '800', color: '#1e3a5f', fontSize: '1.1rem' }}>📖 Choisir du catalogue</h3>
+                <button onClick={() => setShowCatPicker(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+              </div>
+              <input value={catSearch} onChange={e => setCatSearch(e.target.value)} placeholder="🔍 Rechercher..."
+                style={{ width: '100%', padding: '0.65rem 0.9rem', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }} />
+              <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
+                {[{ key: 'tous', label: 'Tout' }, { key: 'service', label: '🔧 Prestations' }, { key: 'product', label: '📦 Matériaux' }].map(t => (
+                  <button key={t.key} onClick={() => setCatTypeFilter(t.key)}
+                    style={{ padding: '0.3rem 0.7rem', borderRadius: '20px', border: '1.5px solid', borderColor: catTypeFilter === t.key ? '#1e3a5f' : '#e2e8f0', backgroundColor: catTypeFilter === t.key ? '#1e3a5f' : 'white', color: catTypeFilter === t.key ? 'white' : '#64748b', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Picker list */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.5rem 1.5rem' }}>
+              {catalogue
+                .filter(item => {
+                  if (catTypeFilter !== 'tous' && item.type !== catTypeFilter) return false
+                  if (!catSearch) return true
+                  const q = catSearch.toLowerCase()
+                  return item.name.toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
+                })
+                .map(item => {
+                  const CAT_COLORS = { isolation: '#2563eb', chauffage: '#ea580c', electricite: '#ca8a04', plomberie: '#0891b2', menuiserie: '#7c3aed', autre: '#64748b' }
+                  const CAT_BG    = { isolation: '#dbeafe', chauffage: '#ffedd5', electricite: '#fef9c3', plomberie: '#cffafe', menuiserie: '#ede9fe', autre: '#f1f5f9' }
+                  const CAT_ICONS = { isolation: '🏠', chauffage: '🔥', electricite: '⚡', plomberie: '💧', menuiserie: '🪵', autre: '🔧' }
+                  const color = CAT_COLORS[item.category] || '#64748b'
+                  const bg    = CAT_BG[item.category]    || '#f1f5f9'
+                  const icon  = CAT_ICONS[item.category] || '🔧'
+                  return (
+                    <button key={item.id} onClick={() => selectFromCatalogue(item)}
+                      style={{ width: '100%', textAlign: 'left', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.85rem 1rem', marginBottom: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.8rem', transition: 'border-color 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = color}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                      <div style={{ width: '40px', height: '40px', backgroundColor: bg, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>{icon}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.9rem', marginBottom: '0.1rem' }}>{item.name}</p>
+                        {item.description && <p style={{ fontSize: '0.76rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</p>}
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <p style={{ fontWeight: '800', color: color, fontSize: '1rem' }}>{item.unitPrice} €</p>
+                        <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/ {item.unit}</p>
+                      </div>
+                    </button>
+                  )
+                })
+              }
+              {catalogue.filter(item => {
+                if (catTypeFilter !== 'tous' && item.type !== catTypeFilter) return false
+                if (!catSearch) return true
+                const q = catSearch.toLowerCase()
+                return item.name.toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
+              }).length === 0 && (
+                <p style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>Aucun résultat. Essayez un autre mot-clé.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>
