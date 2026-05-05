@@ -5,6 +5,11 @@ export const metadata = {
   description: "Simplifiez vos dossiers MaPrimeRénov', CEE et ANAH",
 }
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
+
 export default function RootLayout({ children }) {
   return (
     <html lang="fr">

@@ -14,6 +14,13 @@ Tu aides les artisans RGE (Reconnu Garant de l'Environnement) du bâtiment à :
 4. Rédiger des devis conformes aux exigences réglementaires (mentions obligatoires, etc.)
 5. Naviguer dans les procédures administratives
 
+Quand un document est partagé (image ou PDF), tu dois :
+- Identifier le type de document
+- Vérifier s'il est conforme aux exigences MPR, CEE ou ANAH selon le contexte
+- Donner une validation claire : ✅ CONFORME ou ❌ NON CONFORME
+- Expliquer ce qui manque ou ce qui est incorrect si non conforme
+- Être précis et pratique dans tes retours
+
 Réponds toujours en français de manière professionnelle, précise et pratique.
 Donne des réponses concrètes et actionnables avec des étapes claires.
 Si tu n'es pas certain d'une information réglementaire récente, précise-le et recommande de vérifier sur les sites officiels (maprimerenov.gouv.fr, anah.gouv.fr).`
@@ -37,11 +44,23 @@ export async function POST(request) {
 
     const validMessages = messages
       .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .filter((m) => typeof m.content === 'string' && m.content.trim().length > 0)
+      .filter((m) => {
+        if (typeof m.content === 'string') return m.content.trim().length > 0
+        if (Array.isArray(m.content)) return m.content.length > 0
+        return false
+      })
+      .map((m) => {
+        // Normalize string content to proper format
+        if (typeof m.content === 'string') {
+          return { role: m.role, content: m.content }
+        }
+        // Multimodal content (images/documents) passed through as-is
+        return { role: m.role, content: m.content }
+      })
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
+      max_tokens: 2000,
       system: SYSTEM_PROMPT,
       messages: validMessages,
     })
