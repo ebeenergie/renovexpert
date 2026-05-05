@@ -15,17 +15,28 @@ const quickActions = [
 ]
 
 function loadStats() {
-  if (typeof window === 'undefined') return { activeDossiers: 0, missingDocs: 0, sentDevis: 0 }
+  if (typeof window === 'undefined') return { activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null }
   try {
     const dossiers = JSON.parse(localStorage.getItem('renovexpert_dossiers') || '[]')
-    const devis = JSON.parse(localStorage.getItem('renovexpert_devis') || '[]')
+    const clients = JSON.parse(localStorage.getItem('renovexpert_clients') || '[]')
+    const factures = JSON.parse(localStorage.getItem('renovexpert_factures') || '[]')
+    const agenda = JSON.parse(localStorage.getItem('renovexpert_agenda') || '[]')
+    const todayStr = new Date().toISOString().split('T')[0]
+
     const activeDossiers = dossiers.filter(d => d.status !== 'Complété').length
     const missingDocs = dossiers.reduce((sum, d) => {
       return sum + (d.checklist || []).filter(c => c.status === 'manquant' || (!c.status && !c.checked)).length
     }, 0)
-    const sentDevis = devis.filter(d => d.status === 'envoye' || d.status === 'accepte').length
-    return { activeDossiers, missingDocs, sentDevis }
-  } catch { return { activeDossiers: 0, missingDocs: 0, sentDevis: 0 } }
+    const activeClients = clients.filter(c => c.status === 'actif').length
+    const pendingCA = factures
+      .filter(f => f.status === 'envoyee' || f.status === 'en_retard')
+      .reduce((s, f) => s + (parseFloat(f.amount) || 0) * (1 + (parseFloat(f.tva) || 10) / 100), 0)
+    const nextEvent = agenda
+      .filter(e => e.date >= todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.heure.localeCompare(b.heure))[0] || null
+
+    return { activeDossiers, missingDocs, activeClients, pendingCA, nextEvent }
+  } catch { return { activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null } }
 }
 
 export default function Dashboard() {
@@ -38,7 +49,7 @@ export default function Dashboard() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [stats, setStats] = useState({ activeDossiers: 0, missingDocs: 0, sentDevis: 0 })
+  const [stats, setStats] = useState({ activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null })
   const [attachedFile, setAttachedFile] = useState(null)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -149,30 +160,48 @@ export default function Dashboard() {
             <h1 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.3rem' }}>Bonjour, {user.name} 👋</h1>
             <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>{user.company} · Plan {user.plan || 'Essentiel'}</p>
           </div>
-          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
-            <Link href="/dossiers" style={{ backgroundColor: '#d97706', color: 'white', padding: '0.7rem 1.3rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem' }}>📁 Nouveau dossier</Link>
-            <Link href="/devis" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', padding: '0.7rem 1.3rem', borderRadius: '10px', fontWeight: '600', fontSize: '0.9rem', border: '1px solid rgba(255,255,255,0.2)' }}>📄 Nouveau devis</Link>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <Link href="/dossiers" style={{ backgroundColor: '#d97706', color: 'white', padding: '0.65rem 1.1rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.85rem', textDecoration: 'none' }}>📁 Dossier</Link>
+            <Link href="/devis" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', padding: '0.65rem 1.1rem', borderRadius: '10px', fontWeight: '600', fontSize: '0.85rem', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none' }}>📄 Devis</Link>
+            <Link href="/clients" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', padding: '0.65rem 1.1rem', borderRadius: '10px', fontWeight: '600', fontSize: '0.85rem', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none' }}>👥 Clients</Link>
+            <Link href="/factures" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', padding: '0.65rem 1.1rem', borderRadius: '10px', fontWeight: '600', fontSize: '0.85rem', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none' }}>💰 Factures</Link>
           </div>
         </div>
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
           {[
             { icon: '📁', label: 'Dossiers actifs', value: stats.activeDossiers, color: '#1d4ed8', bg: '#dbeafe', href: '/dossiers' },
+            { icon: '👥', label: 'Clients actifs', value: stats.activeClients, color: '#7c3aed', bg: '#ede9fe', href: '/clients' },
             { icon: '⚠️', label: 'Docs manquants', value: stats.missingDocs, color: '#d97706', bg: '#fef3c7', href: '/dossiers' },
-            { icon: '📄', label: 'Devis envoyés', value: stats.sentDevis, color: '#15803d', bg: '#dcfce7', href: '/devis' },
+            { icon: '💰', label: 'En attente paiement', value: stats.pendingCA > 0 ? Math.round(stats.pendingCA) + ' €' : '0 €', color: '#15803d', bg: '#dcfce7', href: '/factures' },
           ].map((stat) => (
             <Link key={stat.label} href={stat.href} style={{ textDecoration: 'none' }}>
               <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ width: '50px', height: '50px', backgroundColor: stat.bg, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>{stat.icon}</div>
+                <div style={{ width: '48px', height: '48px', backgroundColor: stat.bg, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>{stat.icon}</div>
                 <div>
-                  <div style={{ fontSize: '2rem', fontWeight: '800', color: stat.color, lineHeight: 1 }}>{stat.value}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.2rem' }}>{stat.label}</div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>{stat.label}</div>
                 </div>
               </div>
             </Link>
           ))}
         </div>
+
+        {/* Next appointment banner */}
+        {stats.nextEvent && (
+          <Link href="/agenda" style={{ textDecoration: 'none' }}>
+            <div style={{ backgroundColor: '#1e3a5f', borderRadius: '14px', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ width: '44px', height: '44px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>🗓</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.15rem' }}>Prochain rendez-vous</p>
+                <p style={{ color: 'white', fontWeight: '700', fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stats.nextEvent.titre}</p>
+                <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{stats.nextEvent.date === new Date().toISOString().split('T')[0] ? "Aujourd'hui" : stats.nextEvent.date} · {stats.nextEvent.heure}</p>
+              </div>
+              <span style={{ color: '#d97706', fontSize: '1.2rem', flexShrink: 0 }}>›</span>
+            </div>
+          </Link>
+        )}
 
         {/* Chat area */}
         <div style={{ display: 'flex', gap: '1.2rem', flex: 1 }}>
