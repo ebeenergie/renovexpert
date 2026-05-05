@@ -35,8 +35,8 @@ export default function CataloguePage() {
   function save(list) { setItems(list); localStorage.setItem('renovexpert_catalogue', JSON.stringify(list)) }
   function toast3(msg) { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
-  function openNew() {
-    setForm({ ...blank, id: Date.now().toString() })
+  function openNew(type = 'service') {
+    setForm({ ...blank, id: Date.now().toString(), type })
     setEditId(null)
     setShowForm(true)
   }
@@ -87,19 +87,27 @@ export default function CataloguePage() {
       {/* Header */}
       <div style={{ backgroundColor: '#1e3a5f', padding: '1.5rem', color: 'white', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div>
-              <h1 style={{ fontSize: '1.4rem', fontWeight: '800' }}>📖 Mon Catalogue</h1>
-              <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{items.length} prestation{items.length !== 1 ? 's' : ''} & matériaux</p>
-            </div>
-            <button onClick={openNew}
-              style={{ backgroundColor: '#d97706', color: 'white', border: 'none', padding: '0.75rem 1.2rem', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              + Ajouter
-            </button>
+          <div style={{ marginBottom: '1rem' }}>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: '800' }}>📖 Mon Catalogue</h1>
+            <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{items.length} prestation{items.length !== 1 ? 's' : ''} & matériaux</p>
           </div>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="🔍 Rechercher une prestation, un matériau..."
             style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '10px', border: 'none', fontSize: '0.9rem', backgroundColor: 'rgba(255,255,255,0.1)', color: 'white', outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+      </div>
+
+      {/* Big action buttons */}
+      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', padding: '1rem 1.5rem' }}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button onClick={() => openNew('service')}
+            style={{ flex: 1, minWidth: '200px', backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '1rem 1.5rem', borderRadius: '14px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: '0 4px 12px rgba(37,99,235,0.3)' }}>
+            🔧 Ajouter une prestation
+          </button>
+          <button onClick={() => openNew('product')}
+            style={{ flex: 1, minWidth: '200px', backgroundColor: '#7c3aed', color: 'white', border: 'none', padding: '1rem 1.5rem', borderRadius: '14px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: '0 4px 12px rgba(124,58,237,0.3)' }}>
+            📦 Ajouter un matériau
+          </button>
         </div>
       </div>
 
@@ -142,9 +150,14 @@ export default function CataloguePage() {
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📖</div>
             <h3 style={{ fontWeight: '700', marginBottom: '0.5rem' }}>Aucun élément trouvé</h3>
             <p style={{ marginBottom: '1.5rem' }}>Ajoutez vos prestations et matériaux habituels.</p>
-            <button onClick={openNew} style={{ backgroundColor: '#d97706', color: 'white', border: 'none', padding: '0.85rem 2rem', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer' }}>
-              + Ajouter un élément
-            </button>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => openNew('service')} style={{ backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '0.85rem 1.5rem', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer' }}>
+                🔧 Ajouter une prestation
+              </button>
+              <button onClick={() => openNew('product')} style={{ backgroundColor: '#7c3aed', color: 'white', border: 'none', padding: '0.85rem 1.5rem', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer' }}>
+                📦 Ajouter un matériau
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
@@ -204,7 +217,9 @@ export default function CataloguePage() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '20px 20px 0 0', padding: '2rem', width: '100%', maxWidth: '620px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e3a5f' }}>{editId ? '✏️ Modifier' : '➕ Nouvel élément'}</h2>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e3a5f' }}>
+                {editId ? '✏️ Modifier' : form.type === 'service' ? '🔧 Nouvelle prestation' : '📦 Nouveau matériau'}
+              </h2>
               <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
