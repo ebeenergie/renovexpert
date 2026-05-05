@@ -10,6 +10,7 @@ const navItems = [
   { href: '/catalogue', icon: '📦', label: 'Catalogue' },
   { href: '/factures', icon: '💰', label: 'Factures' },
   { href: '/agenda', icon: '🗓', label: 'Agenda' },
+  { href: '/settings', icon: '⚙️', label: 'Réglages' },
 ]
 
 export default function BottomNav() {
