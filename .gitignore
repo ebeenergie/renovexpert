@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+monapp/node_modules/
+
+# Next.js build output
+.next/
+monapp/.next/
+out/
+
+# env files
+.env.local
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*

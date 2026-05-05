@@ -1,0 +1,57 @@
+import Anthropic from '@anthropic-ai/sdk'
+
+const SYSTEM_PROMPT = `Tu es un expert en aides financières pour la rénovation énergétique en France, spécialisé dans :
+
+- **MaPrimeRénov' (MPR)** : le dispositif principal d'aide à la rénovation énergétique géré par l'ANAH
+- **Certificats d'Économies d'Énergie (CEE)** : les primes énergie des fournisseurs d'énergie
+- **Les aides de l'ANAH** : Habiter Mieux Sérénité, Habiter Facile pour les ménages modestes
+- **Autres aides** : Éco-PTZ, TVA à 5,5%, aides des collectivités locales
+
+Tu aides les artisans RGE (Reconnu Garant de l'Environnement) du bâtiment à :
+1. Constituer et suivre les dossiers de leurs clients
+2. Calculer les montants des aides auxquels leurs clients ont droit
+3. Vérifier l'éligibilité des travaux et des ménages
+4. Rédiger des devis conformes aux exigences réglementaires (mentions obligatoires, etc.)
+5. Naviguer dans les procédures administratives
+
+Réponds toujours en français de manière professionnelle, précise et pratique.
+Donne des réponses concrètes et actionnables avec des étapes claires.
+Si tu n'es pas certain d'une information réglementaire récente, précise-le et recommande de vérifier sur les sites officiels (maprimerenov.gouv.fr, anah.gouv.fr).`
+
+export async function POST(request) {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return Response.json(
+        { error: 'ANTHROPIC_API_KEY non configurée. Copiez .env.example vers .env.local et ajoutez votre clé API.' },
+        { status: 500 }
+      )
+    }
+
+    const { messages } = await request.json()
+
+    if (!messages || !Array.isArray(messages)) {
+      return Response.json({ error: 'Format de messages invalide.' }, { status: 400 })
+    }
+
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    const validMessages = messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .filter((m) => typeof m.content === 'string' && m.content.trim().length > 0)
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      system: SYSTEM_PROMPT,
+      messages: validMessages,
+    })
+
+    return Response.json({ content: response.content[0].text })
+  } catch (error) {
+    console.error('Chat API error:', error)
+    return Response.json(
+      { error: error.message || 'Une erreur inattendue est survenue.' },
+      { status: 500 }
+    )
+  }
+}
