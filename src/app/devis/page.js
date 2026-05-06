@@ -16,6 +16,14 @@ const TAX_RATES = [
   { label: 'TVA 20% (taux normal)', value: 20 },
 ]
 
+const AIDE_TYPES = [
+  { value: 'MPR', label: "MaPrimeRénov'" },
+  { value: 'CEE', label: 'Prime CEE' },
+  { value: 'ANAH', label: 'Aide ANAH' },
+  { value: 'EcoPTZ', label: 'Éco-PTZ' },
+  { value: 'autre', label: 'Autre aide' },
+]
+
 const DEFAULT_CGU = `CONDITIONS GÉNÉRALES DE VENTE — TRAVAUX DE RÉNOVATION
 
 Article 1 – Objet
@@ -75,9 +83,11 @@ const emptyForm = () => ({
   clientEmail: '',
   clientPhone: '',
   workDescription: '',
-  items: [{ id: generateId(), description: '', quantity: 1, unitPrice: 0 }],
+  items: [{ id: generateId(), description: '', quantity: 1, unitPrice: 0, discount: { type: 'percent', value: '' } }],
   laborCost: 0,
   taxRate: 10,
+  globalDiscount: { type: 'percent', value: '' },
+  aides: [],
   notes: '',
   status: 'brouillon',
 })
@@ -213,14 +223,45 @@ export default function DevisPage() {
   }
 
   // Calculations
+  const lineGross = (it) => (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0)
+  const lineDiscountAmount = (it) => {
+    const d = it.discount
+    if (!d || !d.value) return 0
+    const v = parseFloat(d.value) || 0
+    if (d.type === 'percent') return lineGross(it) * v / 100
+    return v
+  }
+  const lineNet = (it) => Math.max(0, lineGross(it) - lineDiscountAmount(it))
+  const calcSubtotalGross = (items, laborCost) =>
+    items.reduce((sum, it) => sum + lineGross(it), 0) + (parseFloat(laborCost) || 0)
+  const calcLineDiscountsTotal = (items) =>
+    items.reduce((sum, it) => sum + lineDiscountAmount(it), 0)
   const calcSubtotal = (items, laborCost) =>
-    items.reduce((sum, it) => sum + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0) + (parseFloat(laborCost) || 0)
-  const calcTax = (subtotal, rate) => subtotal * rate / 100
+    items.reduce((sum, it) => sum + lineNet(it), 0) + (parseFloat(laborCost) || 0)
+  const globalDiscountAmount = (subtotal, gd) => {
+    if (!gd || !gd.value) return 0
+    const v = parseFloat(gd.value) || 0
+    if (gd.type === 'percent') return subtotal * v / 100
+    return v
+  }
+  const calcSubtotalAfterDiscount = (items, laborCost, gd) => {
+    const sub = calcSubtotal(items, laborCost)
+    return Math.max(0, sub - globalDiscountAmount(sub, gd))
+  }
+  const calcTax = (subtotal, rate) => subtotal * (parseFloat(rate) || 0) / 100
   const calcTotal = (subtotal, tax) => subtotal + tax
+  const calcAidesTotal = (aides) => (aides || []).reduce((s, a) => s + (parseFloat(a.amount) || 0), 0)
+  const calcResteACharge = (totalTTC, aidesTotal) => Math.max(0, totalTTC - aidesTotal)
 
-  const subtotal = calcSubtotal(form.items, form.laborCost)
-  const tax = calcTax(subtotal, form.taxRate)
-  const total = calcTotal(subtotal, tax)
+  const subtotalGross = calcSubtotalGross(form.items, form.laborCost)
+  const lineDiscountsTotal = calcLineDiscountsTotal(form.items)
+  const subtotalNet = calcSubtotal(form.items, form.laborCost)
+  const globalDiscount = globalDiscountAmount(subtotalNet, form.globalDiscount)
+  const subtotalAfter = Math.max(0, subtotalNet - globalDiscount)
+  const tax = calcTax(subtotalAfter, form.taxRate)
+  const total = calcTotal(subtotalAfter, tax)
+  const aidesTotal = calcAidesTotal(form.aides)
+  const resteACharge = calcResteACharge(total, aidesTotal)
 
   const fmt = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 
@@ -233,6 +274,10 @@ export default function DevisPage() {
   const removeItem = (id) => setForm(f => ({ ...f, items: f.items.filter(it => it.id !== id) }))
   const updateItem = (id, field, value) => setForm(f => ({ ...f, items: f.items.map(it => it.id === id ? { ...it, [field]: value } : it) }))
 
+  const addAide = () => setForm(f => ({ ...f, aides: [...f.aides, { id: generateId(), type: 'MPR', label: '', amount: '' }] }))
+  const updateAide = (id, field, value) => setForm(f => ({ ...f, aides: f.aides.map(a => a.id === id ? { ...a, [field]: value } : a) }))
+  const removeAide = (id) => setForm(f => ({ ...f, aides: f.aides.filter(a => a.id !== id) }))
+
   const handleCreate = () => {
     if (!form.clientName.trim()) { setFormError('Le nom du client est requis.'); return }
     if (!form.workDescription.trim()) { setFormError('La description des travaux est requise.'); return }
@@ -244,7 +289,20 @@ export default function DevisPage() {
       clientId: form.clientId || undefined,
       ...form,
       laborCost: parseFloat(form.laborCost) || 0,
-      items: form.items.map(it => ({ ...it, quantity: parseFloat(it.quantity) || 0, unitPrice: parseFloat(it.unitPrice) || 0 })),
+      items: form.items.map(it => ({
+        ...it,
+        quantity: parseFloat(it.quantity) || 0,
+        unitPrice: parseFloat(it.unitPrice) || 0,
+        discount: it.discount && it.discount.value !== '' && it.discount.value != null
+          ? { type: it.discount.type || 'percent', value: parseFloat(it.discount.value) || 0 }
+          : null,
+      })),
+      globalDiscount: form.globalDiscount && form.globalDiscount.value !== '' && form.globalDiscount.value != null
+        ? { type: form.globalDiscount.type || 'percent', value: parseFloat(form.globalDiscount.value) || 0 }
+        : null,
+      aides: (form.aides || [])
+        .filter(a => parseFloat(a.amount) > 0)
+        .map(a => ({ id: a.id, type: a.type, label: a.label || '', amount: parseFloat(a.amount) || 0 })),
       createdAt: new Date().toLocaleDateString('fr-FR'),
     }
     const updated = [newDevis, ...devisList]
@@ -286,9 +344,15 @@ export default function DevisPage() {
 
   // ─── PRINT VIEW ────────────────────────────────────────────────────────────
   if (view === 'print' && selected) {
+    const subGross = calcSubtotalGross(selected.items, selected.laborCost)
+    const lineDiscTotal = calcLineDiscountsTotal(selected.items)
     const sub = calcSubtotal(selected.items, selected.laborCost)
-    const tx = calcTax(sub, selected.taxRate)
-    const tot = calcTotal(sub, tx)
+    const gd = globalDiscountAmount(sub, selected.globalDiscount)
+    const subAfter = Math.max(0, sub - gd)
+    const tx = calcTax(subAfter, selected.taxRate)
+    const tot = calcTotal(subAfter, tx)
+    const aidesT = calcAidesTotal(selected.aides)
+    const reste = calcResteACharge(tot, aidesT)
     return (
       <div style={{ fontFamily: 'Arial, sans-serif', maxWidth: '800px', margin: '0 auto', padding: '2rem', backgroundColor: 'white' }}>
         <div className="no-print" style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.8rem' }}>
@@ -336,14 +400,30 @@ export default function DevisPage() {
               </tr>
             </thead>
             <tbody>
-              {selected.items.map((it, i) => (
-                <tr key={it.id} style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f8fafc' }}>
-                  <td style={{ padding: '0.7rem 0.8rem', fontSize: '0.9rem' }}>{it.description || '-'}</td>
-                  <td style={{ padding: '0.7rem 0.8rem', textAlign: 'center', fontSize: '0.9rem' }}>{it.quantity}</td>
-                  <td style={{ padding: '0.7rem 0.8rem', textAlign: 'right', fontSize: '0.9rem' }}>{fmt(it.unitPrice)}</td>
-                  <td style={{ padding: '0.7rem 0.8rem', textAlign: 'right', fontSize: '0.9rem' }}>{fmt(it.quantity * it.unitPrice)}</td>
-                </tr>
-              ))}
+              {selected.items.map((it, i) => {
+                const g = (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0)
+                const d = it.discount
+                let n = g, hasDisc = false
+                if (d && d.value) {
+                  const v = parseFloat(d.value) || 0
+                  const da = d.type === 'percent' ? g * v / 100 : v
+                  n = Math.max(0, g - da)
+                  hasDisc = da > 0
+                }
+                return (
+                  <tr key={it.id} style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f8fafc' }}>
+                    <td style={{ padding: '0.7rem 0.8rem', fontSize: '0.9rem' }}>
+                      {it.description || '-'}
+                      {hasDisc && <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '0.15rem' }}>Remise : {d.type === 'percent' ? `${d.value}%` : fmt(parseFloat(d.value) || 0)}</div>}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.8rem', textAlign: 'center', fontSize: '0.9rem' }}>{it.quantity}</td>
+                    <td style={{ padding: '0.7rem 0.8rem', textAlign: 'right', fontSize: '0.9rem' }}>{fmt(it.unitPrice)}</td>
+                    <td style={{ padding: '0.7rem 0.8rem', textAlign: 'right', fontSize: '0.9rem' }}>
+                      {hasDisc ? <><span style={{ textDecoration: 'line-through', color: '#94a3b8', marginRight: '0.4rem' }}>{fmt(g)}</span><span style={{ fontWeight: '600' }}>{fmt(n)}</span></> : fmt(g)}
+                    </td>
+                  </tr>
+                )
+              })}
               {selected.laborCost > 0 && (
                 <tr style={{ backgroundColor: '#f8fafc' }}>
                   <td style={{ padding: '0.7rem 0.8rem', fontSize: '0.9rem' }}>Main d'œuvre</td>
@@ -357,9 +437,26 @@ export default function DevisPage() {
 
           {/* Totals */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
-            <div style={{ width: '280px' }}>
+            <div style={{ width: '320px' }}>
+              {(lineDiscTotal > 0 || gd > 0) && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', fontSize: '0.88rem' }}>
+                    <span style={{ color: '#64748b' }}>Total HT brut</span><span>{fmt(subGross)}</span>
+                  </div>
+                  {lineDiscTotal > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', fontSize: '0.88rem', color: '#9a3412' }}>
+                      <span>− Remises sur lignes</span><span>− {fmt(lineDiscTotal)}</span>
+                    </div>
+                  )}
+                  {gd > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', fontSize: '0.88rem', color: '#9a3412' }}>
+                      <span>− Remise globale {selected.globalDiscount?.type === 'percent' ? `(${selected.globalDiscount.value}%)` : ''}</span><span>− {fmt(gd)}</span>
+                    </div>
+                  )}
+                </>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
-                <span style={{ color: '#64748b' }}>Total HT</span><span style={{ fontWeight: '600' }}>{fmt(sub)}</span>
+                <span style={{ color: '#64748b' }}>Total HT net</span><span style={{ fontWeight: '600' }}>{fmt(subAfter)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
                 <span style={{ color: '#64748b' }}>TVA ({selected.taxRate}%)</span><span style={{ fontWeight: '600' }}>{fmt(tx)}</span>
@@ -367,6 +464,28 @@ export default function DevisPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#1e3a5f', color: 'white', marginTop: '0.5rem', borderRadius: '6px', padding: '0.8rem 1rem' }}>
                 <span style={{ fontWeight: '700', fontSize: '1.1rem' }}>TOTAL TTC</span><span style={{ fontWeight: '800', fontSize: '1.2rem' }}>{fmt(tot)}</span>
               </div>
+              {aidesT > 0 && (
+                <>
+                  <div style={{ marginTop: '0.8rem', padding: '0.5rem 0', borderTop: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Aides déduites</div>
+                    {(selected.aides || []).filter(a => parseFloat(a.amount) > 0).map(a => {
+                      const meta = AIDE_TYPES.find(t => t.value === a.type)
+                      return (
+                        <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0', fontSize: '0.85rem', color: '#16a34a' }}>
+                          <span>− {a.label || meta?.label || a.type}</span><span>− {fmt(parseFloat(a.amount) || 0)}</span>
+                        </div>
+                      )
+                    })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0 0.2rem', fontSize: '0.9rem', color: '#15803d', fontWeight: '700', borderTop: '1px dashed #bbf7d0', marginTop: '0.3rem' }}>
+                      <span>Montant des aides</span><span>− {fmt(aidesT)}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#16a34a', color: 'white', marginTop: '0.5rem', borderRadius: '6px', padding: '1rem 1.2rem' }}>
+                    <span style={{ fontWeight: '800', fontSize: '1rem' }}>RESTE À CHARGE CLIENT</span>
+                    <span style={{ fontWeight: '900', fontSize: '1.4rem' }}>{fmt(reste)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -441,8 +560,10 @@ export default function DevisPage() {
               </div>
             )}
             {devisList.map((d) => {
-              const sub = calcSubtotal(d.items, d.laborCost)
-              const tot = calcTotal(sub, calcTax(sub, d.taxRate))
+              const subAfter = calcSubtotalAfterDiscount(d.items, d.laborCost, d.globalDiscount)
+              const tot = calcTotal(subAfter, calcTax(subAfter, d.taxRate))
+              const aidesT = calcAidesTotal(d.aides)
+              const reste = calcResteACharge(tot, aidesT)
               const isActive = selected?.id === d.id && (view === 'detail' || view === 'print')
               const sc = STATUS_COLORS[d.status] || STATUS_COLORS.brouillon
               return (
@@ -459,6 +580,9 @@ export default function DevisPage() {
                   </div>
                   <div style={{ fontSize: '0.78rem', color: isActive ? '#94a3b8' : '#64748b', marginBottom: '0.3rem' }}>{d.numero} · {d.createdAt}</div>
                   <div style={{ fontSize: '0.88rem', fontWeight: '700', color: isActive ? '#fbbf24' : '#d97706' }}>{fmt(tot)}</div>
+                  {aidesT > 0 && (
+                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: isActive ? '#86efac' : '#16a34a', marginTop: '0.15rem' }}>Reste à charge : {fmt(reste)}</div>
+                  )}
                 </div>
               )
             })}
@@ -535,21 +659,44 @@ export default function DevisPage() {
                       <button onClick={addItem} style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>+ Ligne vide</button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 110px 40px', gap: '0.5rem' }}>
                       {['Description', 'Qté', 'Prix unitaire HT', ''].map((h, i) => (
                         <div key={i} style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748b', padding: '0 0.2rem' }}>{h}</div>
                       ))}
                     </div>
-                    {form.items.map((it) => (
-                      <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 110px 40px', gap: '0.5rem', alignItems: 'center' }}>
-                        <input value={it.description} onChange={e => updateItem(it.id, 'description', e.target.value)} placeholder="Ex : Laine de verre 200mm" style={{ ...inputStyle, padding: '0.6rem 0.8rem' }} />
-                        <input value={it.quantity} onChange={e => updateItem(it.id, 'quantity', e.target.value)} type="number" min="0" step="0.01" style={{ ...inputStyle, padding: '0.6rem 0.5rem', textAlign: 'center' }} />
-                        <input value={it.unitPrice} onChange={e => updateItem(it.id, 'unitPrice', e.target.value)} type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inputStyle, padding: '0.6rem 0.8rem', textAlign: 'right' }} />
-                        <button onClick={() => removeItem(it.id)} disabled={form.items.length === 1}
-                          style={{ backgroundColor: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '6px', cursor: form.items.length === 1 ? 'not-allowed' : 'pointer', fontSize: '1rem', height: '40px', opacity: form.items.length === 1 ? 0.4 : 1 }}>×</button>
-                      </div>
-                    ))}
+                    {form.items.map((it) => {
+                      const gross = lineGross(it)
+                      const disc = lineDiscountAmount(it)
+                      const net = lineNet(it)
+                      const hasDiscount = disc > 0
+                      return (
+                        <div key={it.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', backgroundColor: '#f8fafc', borderRadius: '8px', padding: '0.6rem' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 110px 40px', gap: '0.5rem', alignItems: 'center' }}>
+                            <input value={it.description} onChange={e => updateItem(it.id, 'description', e.target.value)} placeholder="Ex : Laine de verre 200mm" style={{ ...inputStyle, padding: '0.6rem 0.8rem' }} />
+                            <input value={it.quantity} onChange={e => updateItem(it.id, 'quantity', e.target.value)} type="number" min="0" step="0.01" style={{ ...inputStyle, padding: '0.6rem 0.5rem', textAlign: 'center' }} />
+                            <input value={it.unitPrice} onChange={e => updateItem(it.id, 'unitPrice', e.target.value)} type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inputStyle, padding: '0.6rem 0.8rem', textAlign: 'right' }} />
+                            <button onClick={() => removeItem(it.id)} disabled={form.items.length === 1}
+                              style={{ backgroundColor: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '6px', cursor: form.items.length === 1 ? 'not-allowed' : 'pointer', fontSize: '1rem', height: '40px', opacity: form.items.length === 1 ? 0.4 : 1 }}>×</button>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '60px 90px 110px 1fr 40px', gap: '0.4rem', alignItems: 'center', fontSize: '0.78rem' }}>
+                            <span style={{ color: '#64748b', fontWeight: '600' }}>💸 Remise</span>
+                            <select value={it.discount?.type || 'percent'}
+                              onChange={e => updateItem(it.id, 'discount', { ...(it.discount || {}), type: e.target.value, value: it.discount?.value || '' })}
+                              style={{ ...inputStyle, padding: '0.4rem 0.5rem', fontSize: '0.8rem', backgroundColor: 'white' }}>
+                              <option value="percent">%</option>
+                              <option value="amount">€</option>
+                            </select>
+                            <input value={it.discount?.value ?? ''} onChange={e => updateItem(it.id, 'discount', { type: it.discount?.type || 'percent', value: e.target.value })}
+                              type="number" min="0" step="0.01" placeholder="0" style={{ ...inputStyle, padding: '0.4rem 0.6rem', fontSize: '0.8rem', textAlign: 'right' }} />
+                            <div style={{ textAlign: 'right', color: hasDiscount ? '#16a34a' : '#94a3b8', fontWeight: '600' }}>
+                              {hasDiscount ? <><span style={{ textDecoration: 'line-through', color: '#94a3b8', fontWeight: 400, marginRight: '0.4rem' }}>{fmt(gross)}</span>{fmt(net)}</> : <>Total ligne : {fmt(gross)}</>}
+                            </div>
+                            <span></span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -567,10 +714,68 @@ export default function DevisPage() {
                   </div>
                 </div>
 
+                {/* Global discount */}
+                <div style={{ padding: '1rem', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
+                  <label style={{ ...labelStyle, color: '#9a3412' }}>💸 Remise globale sur le total HT (facultatif)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 1fr', gap: '0.5rem', alignItems: 'center' }}>
+                    <select value={form.globalDiscount.type}
+                      onChange={e => setForm(f => ({ ...f, globalDiscount: { ...f.globalDiscount, type: e.target.value } }))}
+                      style={{ ...inputStyle, backgroundColor: 'white' }}>
+                      <option value="percent">Pourcentage (%)</option>
+                      <option value="amount">Montant (€)</option>
+                    </select>
+                    <input value={form.globalDiscount.value} onChange={e => setForm(f => ({ ...f, globalDiscount: { ...f.globalDiscount, value: e.target.value } }))}
+                      type="number" min="0" step="0.01" placeholder="0" style={inputStyle} />
+                    {globalDiscount > 0 && <div style={{ textAlign: 'right', color: '#9a3412', fontWeight: '700' }}>− {fmt(globalDiscount)}</div>}
+                  </div>
+                </div>
+
+                {/* Aides et subventions */}
+                <div style={{ padding: '1rem', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                    <label style={{ ...labelStyle, marginBottom: 0, color: '#065f46' }}>🏛️ Aides et subventions déduites</label>
+                    <button type="button" onClick={addAide}
+                      style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1px solid #86efac', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>
+                      + Ajouter une aide
+                    </button>
+                  </div>
+                  {form.aides.length === 0 && (
+                    <p style={{ fontSize: '0.82rem', color: '#65a30d' }}>Aucune aide saisie. Cliquez sur "+ Ajouter une aide" pour déduire MaPrimeRénov', CEE, ANAH, Éco-PTZ ou autre.</p>
+                  )}
+                  {form.aides.map(a => (
+                    <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 130px 40px', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                      <select value={a.type} onChange={e => updateAide(a.id, 'type', e.target.value)} style={{ ...inputStyle, backgroundColor: 'white' }}>
+                        {AIDE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                      <input value={a.label || ''} onChange={e => updateAide(a.id, 'label', e.target.value)} placeholder={a.type === 'autre' ? 'Nom de l\'aide' : 'Libellé (facultatif)'} style={inputStyle} />
+                      <input value={a.amount} onChange={e => updateAide(a.id, 'amount', e.target.value)} type="number" min="0" step="0.01" placeholder="Montant €" style={{ ...inputStyle, textAlign: 'right' }} />
+                      <button type="button" onClick={() => removeAide(a.id)}
+                        style={{ backgroundColor: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem', height: '40px' }}>×</button>
+                    </div>
+                  ))}
+                </div>
+
                 {/* Totals preview */}
                 <div style={{ backgroundColor: '#1e3a5f', borderRadius: '12px', padding: '1.2rem', color: 'white' }}>
+                  {(lineDiscountsTotal > 0 || globalDiscount > 0) && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.88rem' }}>
+                        <span style={{ color: '#94a3b8' }}>Total HT brut</span><span style={{ color: '#cbd5e1' }}>{fmt(subtotalGross)}</span>
+                      </div>
+                      {lineDiscountsTotal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.88rem', color: '#fdba74' }}>
+                          <span>− Remises sur lignes</span><span>− {fmt(lineDiscountsTotal)}</span>
+                        </div>
+                      )}
+                      {globalDiscount > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.88rem', color: '#fdba74' }}>
+                          <span>− Remise globale</span><span>− {fmt(globalDiscount)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Total HT</span><span style={{ fontWeight: '600' }}>{fmt(subtotal)}</span>
+                    <span style={{ color: '#94a3b8' }}>Total HT net</span><span style={{ fontWeight: '600' }}>{fmt(subtotalAfter)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
                     <span style={{ color: '#94a3b8' }}>TVA ({form.taxRate}%)</span><span style={{ fontWeight: '600' }}>{fmt(tax)}</span>
@@ -579,6 +784,28 @@ export default function DevisPage() {
                     <span style={{ fontWeight: '700', fontSize: '1.1rem' }}>TOTAL TTC</span>
                     <span style={{ fontWeight: '800', fontSize: '1.3rem', color: '#fbbf24' }}>{fmt(total)}</span>
                   </div>
+                  {aidesTotal > 0 && (
+                    <>
+                      <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                        {form.aides.filter(a => parseFloat(a.amount) > 0).map(a => {
+                          const meta = AIDE_TYPES.find(t => t.value === a.type)
+                          const display = a.label || meta?.label || a.type
+                          return (
+                            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', fontSize: '0.85rem', color: '#86efac' }}>
+                              <span>− {display}</span><span>− {fmt(parseFloat(a.amount) || 0)}</span>
+                            </div>
+                          )
+                        })}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.9rem', color: '#bbf7d0', fontWeight: '600' }}>
+                          <span>Montant total des aides</span><span>− {fmt(aidesTotal)}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.8rem', backgroundColor: '#16a34a', padding: '1rem 1.2rem', borderRadius: '10px' }}>
+                        <span style={{ fontWeight: '800', fontSize: '1.05rem' }}>RESTE À CHARGE CLIENT</span>
+                        <span style={{ fontWeight: '900', fontSize: '1.5rem', color: 'white' }}>{fmt(resteACharge)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Notes */}
@@ -601,9 +828,15 @@ export default function DevisPage() {
 
           {/* DETAIL VIEW */}
           {view === 'detail' && selected && (() => {
+            const subGross = calcSubtotalGross(selected.items, selected.laborCost)
+            const lineDiscTotal = calcLineDiscountsTotal(selected.items)
             const sub = calcSubtotal(selected.items, selected.laborCost)
-            const tx = calcTax(sub, selected.taxRate)
-            const tot = calcTotal(sub, tx)
+            const gd = globalDiscountAmount(sub, selected.globalDiscount)
+            const subAfter = Math.max(0, sub - gd)
+            const tx = calcTax(subAfter, selected.taxRate)
+            const tot = calcTotal(subAfter, tx)
+            const aidesT = calcAidesTotal(selected.aides)
+            const reste = calcResteACharge(tot, aidesT)
             const sc = STATUS_COLORS[selected.status] || STATUS_COLORS.brouillon
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -667,14 +900,30 @@ export default function DevisPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 120px 120px', gap: '0.5rem', padding: '0.5rem 0.8rem', backgroundColor: '#f1f5f9', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>
                       <span>Description</span><span style={{ textAlign: 'center' }}>Qté</span><span style={{ textAlign: 'right' }}>P.U. HT</span><span style={{ textAlign: 'right' }}>Total HT</span>
                     </div>
-                    {selected.items.map((it, i) => (
-                      <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 120px 120px', gap: '0.5rem', padding: '0.6rem 0.8rem', backgroundColor: i % 2 === 0 ? 'white' : '#f8fafc', fontSize: '0.9rem' }}>
-                        <span>{it.description || '-'}</span>
-                        <span style={{ textAlign: 'center' }}>{it.quantity}</span>
-                        <span style={{ textAlign: 'right' }}>{fmt(it.unitPrice)}</span>
-                        <span style={{ textAlign: 'right', fontWeight: '600' }}>{fmt(it.quantity * it.unitPrice)}</span>
-                      </div>
-                    ))}
+                    {selected.items.map((it, i) => {
+                      const g = (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0)
+                      const d = it.discount
+                      let n = g, hasDisc = false
+                      if (d && d.value) {
+                        const v = parseFloat(d.value) || 0
+                        const da = d.type === 'percent' ? g * v / 100 : v
+                        n = Math.max(0, g - da)
+                        hasDisc = da > 0
+                      }
+                      return (
+                        <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 120px 120px', gap: '0.5rem', padding: '0.6rem 0.8rem', backgroundColor: i % 2 === 0 ? 'white' : '#f8fafc', fontSize: '0.9rem' }}>
+                          <span>
+                            {it.description || '-'}
+                            {hasDisc && <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '0.15rem' }}>Remise : {d.type === 'percent' ? `${d.value}%` : fmt(parseFloat(d.value) || 0)}</div>}
+                          </span>
+                          <span style={{ textAlign: 'center' }}>{it.quantity}</span>
+                          <span style={{ textAlign: 'right' }}>{fmt(it.unitPrice)}</span>
+                          <span style={{ textAlign: 'right', fontWeight: '600' }}>
+                            {hasDisc ? <><span style={{ textDecoration: 'line-through', color: '#94a3b8', marginRight: '0.4rem', fontWeight: 400 }}>{fmt(g)}</span>{fmt(n)}</> : fmt(g)}
+                          </span>
+                        </div>
+                      )
+                    })}
                     {selected.laborCost > 0 && (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 120px 120px', gap: '0.5rem', padding: '0.6rem 0.8rem', backgroundColor: '#fafafa', fontSize: '0.9rem' }}>
                         <span>Main d'œuvre</span><span style={{ textAlign: 'center' }}>1</span><span style={{ textAlign: 'right' }}>{fmt(selected.laborCost)}</span><span style={{ textAlign: 'right', fontWeight: '600' }}>{fmt(selected.laborCost)}</span>
@@ -682,9 +931,26 @@ export default function DevisPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                    <div style={{ width: '260px', backgroundColor: '#1e3a5f', borderRadius: '10px', padding: '1rem', color: 'white' }}>
+                    <div style={{ width: '320px', backgroundColor: '#1e3a5f', borderRadius: '10px', padding: '1rem', color: 'white' }}>
+                      {(lineDiscTotal > 0 || gd > 0) && (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', fontSize: '0.85rem' }}>
+                            <span style={{ color: '#94a3b8' }}>Total HT brut</span><span style={{ color: '#cbd5e1' }}>{fmt(subGross)}</span>
+                          </div>
+                          {lineDiscTotal > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', fontSize: '0.85rem', color: '#fdba74' }}>
+                              <span>− Remises sur lignes</span><span>− {fmt(lineDiscTotal)}</span>
+                            </div>
+                          )}
+                          {gd > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', fontSize: '0.85rem', color: '#fdba74' }}>
+                              <span>− Remise globale</span><span>− {fmt(gd)}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                        <span style={{ color: '#94a3b8' }}>Total HT</span><span>{fmt(sub)}</span>
+                        <span style={{ color: '#94a3b8' }}>Total HT net</span><span>{fmt(subAfter)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
                         <span style={{ color: '#94a3b8' }}>TVA ({selected.taxRate}%)</span><span>{fmt(tx)}</span>
@@ -692,6 +958,28 @@ export default function DevisPage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.6rem' }}>
                         <span style={{ fontWeight: '700' }}>TOTAL TTC</span><span style={{ fontWeight: '800', fontSize: '1.1rem', color: '#fbbf24' }}>{fmt(tot)}</span>
                       </div>
+                      {aidesT > 0 && (
+                        <>
+                          <div style={{ marginTop: '0.7rem', paddingTop: '0.7rem', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                            <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#86efac', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Aides déduites</div>
+                            {(selected.aides || []).filter(a => parseFloat(a.amount) > 0).map(a => {
+                              const meta = AIDE_TYPES.find(t => t.value === a.type)
+                              return (
+                                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#86efac', marginBottom: '0.2rem' }}>
+                                  <span>− {a.label || meta?.label || a.type}</span><span>− {fmt(parseFloat(a.amount) || 0)}</span>
+                                </div>
+                              )
+                            })}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#bbf7d0', fontWeight: '700', marginTop: '0.3rem' }}>
+                              <span>Total aides</span><span>− {fmt(aidesT)}</span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem', backgroundColor: '#16a34a', padding: '0.8rem 1rem', borderRadius: '8px' }}>
+                            <span style={{ fontWeight: '800', fontSize: '0.9rem' }}>RESTE À CHARGE</span>
+                            <span style={{ fontWeight: '900', fontSize: '1.3rem', color: 'white' }}>{fmt(reste)}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

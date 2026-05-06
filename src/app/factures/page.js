@@ -15,6 +15,23 @@ const STATUS = {
   en_retard: { label: '🔴 En retard', color: '#dc2626', bg: '#fee2e2' },
 }
 
+const AIDE_TYPES = [
+  { value: 'MPR', label: "MaPrimeRénov'" },
+  { value: 'CEE', label: 'Prime CEE' },
+  { value: 'ANAH', label: 'Aide ANAH' },
+  { value: 'EcoPTZ', label: 'Éco-PTZ' },
+  { value: 'autre', label: 'Autre aide' },
+]
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2) }
+function globalDiscountAmount(base, gd) {
+  if (!gd || !gd.value) return 0
+  const v = parseFloat(gd.value) || 0
+  if (gd.type === 'percent') return base * v / 100
+  return v
+}
+function aidesTotalOf(aides) { return (aides || []).reduce((s, a) => s + (parseFloat(a.amount) || 0), 0) }
+
 const DEFAULT_CGU = `CONDITIONS GÉNÉRALES DE VENTE — TRAVAUX DE RÉNOVATION
 
 Article 1 – Objet
@@ -54,6 +71,8 @@ const blank = {
   id: '', number: '', clientId: '', clientName: '', clientAddress: '', devisRef: '',
   amount: '', tva: '10', dateEmission: new Date().toISOString().split('T')[0],
   dateEcheance: '', status: 'brouillon', notes: '',
+  globalDiscount: { type: 'percent', value: '' },
+  aides: [],
   locked: false, clientSignature: null, artisanSignature: null, signedAt: null,
 }
 
@@ -140,8 +159,17 @@ export default function FacturesPage() {
   function submit() {
     if (!form.clientName.trim()) { alert('Nom du client obligatoire'); return }
     if (!form.amount) { alert('Montant obligatoire'); return }
-    if (editId) { save(factures.map(f => f.id === editId ? form : f)); toast3('✅ Facture modifiée !') }
-    else { save([...factures, form]); toast3('🎉 Facture créée !') }
+    const cleaned = {
+      ...form,
+      globalDiscount: form.globalDiscount && form.globalDiscount.value !== '' && form.globalDiscount.value != null
+        ? { type: form.globalDiscount.type || 'percent', value: parseFloat(form.globalDiscount.value) || 0 }
+        : null,
+      aides: (form.aides || [])
+        .filter(a => parseFloat(a.amount) > 0)
+        .map(a => ({ id: a.id, type: a.type, label: a.label || '', amount: parseFloat(a.amount) || 0 })),
+    }
+    if (editId) { save(factures.map(f => f.id === editId ? cleaned : f)); toast3('✅ Facture modifiée !') }
+    else { save([...factures, cleaned]); toast3('🎉 Facture créée !') }
     setShowForm(false)
   }
 
@@ -157,9 +185,13 @@ export default function FacturesPage() {
 
   function openEmail(fac) {
     const artisan = JSON.parse(localStorage.getItem('renovexpert_user') || '{}')
-    const ht = parseFloat(fac.amount) || 0
+    const htBrut = parseFloat(fac.amount) || 0
+    const gdAmt = globalDiscountAmount(htBrut, fac.globalDiscount)
+    const ht = Math.max(0, htBrut - gdAmt)
     const tvaAmt = ht * (parseFloat(fac.tva) || 0) / 100
     const ttcAmt = ht + tvaAmt
+    const aidesAmt = aidesTotalOf(fac.aides)
+    const resteAmt = Math.max(0, ttcAmt - aidesAmt)
     const clients = JSON.parse(localStorage.getItem('renovexpert_clients') || '[]')
     const client = clients.find(c => c.id === fac.clientId)
     const clientEmail = client?.email || ''
@@ -177,9 +209,9 @@ FACTURE N° ${fac.number}
 Client      : ${fac.clientName}
 Date        : ${fac.dateEmission}${fac.dateEcheance ? '\nÉchéance    : ' + fac.dateEcheance : ''}${fac.devisRef ? '\nRéf. devis  : ' + fac.devisRef : ''}
 
-Montant HT  : ${ht.toFixed(2)} €
+${gdAmt > 0 ? 'Montant HT brut: ' + htBrut.toFixed(2) + ' €\nRemise globale : -' + gdAmt.toFixed(2) + ' €\n' : ''}Montant HT  : ${ht.toFixed(2)} €
 TVA (${fac.tva}%)  : ${tvaAmt.toFixed(2)} €
-Total TTC   : ${ttcAmt.toFixed(2)} €
+Total TTC   : ${ttcAmt.toFixed(2)} €${aidesAmt > 0 ? '\nAides       : -' + aidesAmt.toFixed(2) + ' €\nReste à charge: ' + resteAmt.toFixed(2) + ' €' : ''}
 ──────────────────────────────────${fac.notes ? '\n\nObjet : ' + fac.notes : ''}
 
 Règlement à effectuer à réception${fac.dateEcheance ? ' avant le ' + fac.dateEcheance : ''}.
@@ -227,7 +259,16 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
   const acceptedDevis = devis.filter(d => d.status === 'accepte')
 
   const ht = parseFloat(form.amount) || 0
-  const ttc = ht * (1 + parseFloat(form.tva || 0) / 100)
+  const gd = globalDiscountAmount(ht, form.globalDiscount)
+  const htAfter = Math.max(0, ht - gd)
+  const tvaAmt = htAfter * (parseFloat(form.tva || 0) / 100)
+  const ttc = htAfter + tvaAmt
+  const aidesT = aidesTotalOf(form.aides)
+  const reste = Math.max(0, ttc - aidesT)
+
+  const addAideF = () => setForm(f => ({ ...f, aides: [...(f.aides || []), { id: genId(), type: 'MPR', label: '', amount: '' }] }))
+  const updateAideF = (id, field, value) => setForm(f => ({ ...f, aides: (f.aides || []).map(a => a.id === id ? { ...a, [field]: value } : a) }))
+  const removeAideF = (id) => setForm(f => ({ ...f, aides: (f.aides || []).filter(a => a.id !== id) }))
 
   if (!user) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p>Chargement...</p></div>
 
@@ -314,7 +355,12 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
             {[...filtered].sort((a, b) => (b.dateEmission || '').localeCompare(a.dateEmission || '')).map(fac => {
               const st = STATUS[fac.status] || STATUS.brouillon
-              const montantTTC = (parseFloat(fac.amount) || 0) * (1 + (parseFloat(fac.tva) || 10) / 100)
+              const fHt = parseFloat(fac.amount) || 0
+              const fGd = globalDiscountAmount(fHt, fac.globalDiscount)
+              const fHtAfter = Math.max(0, fHt - fGd)
+              const montantTTC = fHtAfter * (1 + (parseFloat(fac.tva) || 10) / 100)
+              const fAides = aidesTotalOf(fac.aides)
+              const fReste = Math.max(0, montantTTC - fAides)
               return (
                 <div key={fac.id} style={{ backgroundColor: 'white', borderRadius: '14px', padding: '1.2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${fac.locked ? '#16a34a' : st.color}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -334,6 +380,9 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '1.4rem', fontWeight: '800', color: fac.locked ? '#16a34a' : st.color }}>{montantTTC.toFixed(0)} €</div>
                       <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>TTC · TVA {fac.tva}%</div>
+                      {fAides > 0 && (
+                        <div style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: '700', marginTop: '0.2rem' }}>Reste à charge : {fReste.toFixed(0)} €</div>
+                      )}
                     </div>
                   </div>
 
@@ -442,14 +491,61 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
                 </tr>
               </tbody>
               <tfoot>
-                <tr>
-                  <td style={{ padding: '0.6rem', textAlign: 'right', fontSize: '0.88rem', color: '#64748b' }}>TVA ({printFac.tva}%)</td>
-                  <td style={{ padding: '0.6rem', textAlign: 'right', fontSize: '0.88rem', color: '#64748b' }}>{(parseFloat(printFac.amount || 0) * parseFloat(printFac.tva || 0) / 100).toFixed(2)} €</td>
-                </tr>
-                <tr style={{ borderTop: '2px solid #1e3a5f' }}>
-                  <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '700', fontSize: '1rem', color: '#1e3a5f' }}>TOTAL TTC</td>
-                  <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '800', fontSize: '1.2rem', color: '#1e3a5f' }}>{(parseFloat(printFac.amount || 0) * (1 + parseFloat(printFac.tva || 0) / 100)).toFixed(2)} €</td>
-                </tr>
+                {(() => {
+                  const pHt = parseFloat(printFac.amount || 0)
+                  const pGd = globalDiscountAmount(pHt, printFac.globalDiscount)
+                  const pHtAfter = Math.max(0, pHt - pGd)
+                  const pTva = pHtAfter * (parseFloat(printFac.tva || 0) / 100)
+                  const pTtc = pHtAfter + pTva
+                  const pAides = aidesTotalOf(printFac.aides)
+                  const pReste = Math.max(0, pTtc - pAides)
+                  return (
+                    <>
+                      {pGd > 0 && (
+                        <tr>
+                          <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontSize: '0.85rem', color: '#9a3412' }}>Remise globale</td>
+                          <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontSize: '0.85rem', color: '#9a3412' }}>− {pGd.toFixed(2)} €</td>
+                        </tr>
+                      )}
+                      {pGd > 0 && (
+                        <tr style={{ borderTop: '1px dashed #e2e8f0' }}>
+                          <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontSize: '0.85rem', color: '#475569', fontWeight: '600' }}>Total HT net</td>
+                          <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontSize: '0.85rem', color: '#475569', fontWeight: '600' }}>{pHtAfter.toFixed(2)} €</td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td style={{ padding: '0.6rem', textAlign: 'right', fontSize: '0.88rem', color: '#64748b' }}>TVA ({printFac.tva}%)</td>
+                        <td style={{ padding: '0.6rem', textAlign: 'right', fontSize: '0.88rem', color: '#64748b' }}>{pTva.toFixed(2)} €</td>
+                      </tr>
+                      <tr style={{ borderTop: '2px solid #1e3a5f' }}>
+                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '700', fontSize: '1rem', color: '#1e3a5f' }}>TOTAL TTC</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: '800', fontSize: '1.2rem', color: '#1e3a5f' }}>{pTtc.toFixed(2)} €</td>
+                      </tr>
+                      {pAides > 0 && (
+                        <>
+                          <tr><td colSpan={2} style={{ padding: '0.5rem 0.75rem 0.2rem', textAlign: 'right', fontSize: '0.72rem', fontWeight: '700', color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Aides déduites</td></tr>
+                          {(printFac.aides || []).filter(a => parseFloat(a.amount) > 0).map(a => {
+                            const meta = AIDE_TYPES.find(t => t.value === a.type)
+                            return (
+                              <tr key={a.id}>
+                                <td style={{ padding: '0.25rem 0.75rem', textAlign: 'right', fontSize: '0.85rem', color: '#16a34a' }}>− {a.label || meta?.label || a.type}</td>
+                                <td style={{ padding: '0.25rem 0.75rem', textAlign: 'right', fontSize: '0.85rem', color: '#16a34a' }}>− {(parseFloat(a.amount) || 0).toFixed(2)} €</td>
+                              </tr>
+                            )
+                          })}
+                          <tr style={{ borderTop: '1px dashed #bbf7d0' }}>
+                            <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontSize: '0.88rem', color: '#15803d', fontWeight: '700' }}>Total aides</td>
+                            <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontSize: '0.88rem', color: '#15803d', fontWeight: '700' }}>− {pAides.toFixed(2)} €</td>
+                          </tr>
+                          <tr style={{ backgroundColor: '#16a34a' }}>
+                            <td style={{ padding: '0.85rem 0.75rem', textAlign: 'right', fontWeight: '800', fontSize: '1rem', color: 'white' }}>RESTE À CHARGE CLIENT</td>
+                            <td style={{ padding: '0.85rem 0.75rem', textAlign: 'right', fontWeight: '900', fontSize: '1.3rem', color: 'white' }}>{pReste.toFixed(2)} €</td>
+                          </tr>
+                        </>
+                      )}
+                    </>
+                  )
+                })()}
               </tfoot>
             </table>
 
@@ -523,10 +619,91 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
                   ))}
                 </div>
               </div>
+              {/* Remise globale */}
+              <div style={{ padding: '0.8rem 1rem', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#9a3412', display: 'block', marginBottom: '0.4rem' }}>💸 Remise globale (facultatif)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '0.5rem' }}>
+                  <select value={form.globalDiscount?.type || 'percent'}
+                    onChange={e => setForm({ ...form, globalDiscount: { ...(form.globalDiscount || {}), type: e.target.value, value: form.globalDiscount?.value || '' } })}
+                    style={{ padding: '0.65rem', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', backgroundColor: 'white' }}>
+                    <option value="percent">Pourcentage (%)</option>
+                    <option value="amount">Montant (€)</option>
+                  </select>
+                  <input value={form.globalDiscount?.value ?? ''} onChange={e => setForm({ ...form, globalDiscount: { type: form.globalDiscount?.type || 'percent', value: e.target.value } })}
+                    type="number" min="0" step="0.01" placeholder="0"
+                    style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.9rem', boxSizing: 'border-box', textAlign: 'right' }} />
+                </div>
+              </div>
+
+              {/* Aides et subventions */}
+              <div style={{ padding: '0.8rem 1rem', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#065f46' }}>🏛️ Aides et subventions déduites</label>
+                  <button type="button" onClick={addAideF}
+                    style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1px solid #86efac', padding: '0.3rem 0.7rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>+ Ajouter</button>
+                </div>
+                {(form.aides || []).length === 0 && (
+                  <p style={{ fontSize: '0.78rem', color: '#65a30d' }}>Aucune aide. Ajoutez MaPrimeRénov', CEE, ANAH, Éco-PTZ ou autre.</p>
+                )}
+                {(form.aides || []).map(a => (
+                  <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 110px 36px', gap: '0.4rem', alignItems: 'center', marginTop: '0.4rem' }}>
+                    <select value={a.type} onChange={e => updateAideF(a.id, 'type', e.target.value)}
+                      style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.82rem', backgroundColor: 'white' }}>
+                      {AIDE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <input value={a.label || ''} onChange={e => updateAideF(a.id, 'label', e.target.value)} placeholder="Libellé"
+                      style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.82rem' }} />
+                    <input value={a.amount} onChange={e => updateAideF(a.id, 'amount', e.target.value)} type="number" min="0" step="0.01" placeholder="€"
+                      style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.82rem', textAlign: 'right' }} />
+                    <button type="button" onClick={() => removeAideF(a.id)}
+                      style={{ background: 'transparent', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '6px', cursor: 'pointer' }}>×</button>
+                  </div>
+                ))}
+              </div>
+
               {ht > 0 && (
-                <div style={{ backgroundColor: '#dbeafe', borderRadius: '10px', padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#1d4ed8', fontWeight: '600' }}>Total TTC estimé</span>
-                  <span style={{ color: '#1d4ed8', fontWeight: '800', fontSize: '1.1rem' }}>{ttc.toFixed(2)} €</span>
+                <div style={{ backgroundColor: '#1e3a5f', borderRadius: '12px', padding: '1rem 1.2rem', color: 'white' }}>
+                  {gd > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.3rem' }}>
+                        <span style={{ color: '#94a3b8' }}>Montant HT brut</span><span style={{ color: '#cbd5e1' }}>{ht.toFixed(2)} €</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.3rem', color: '#fdba74' }}>
+                        <span>− Remise globale</span><span>− {gd.toFixed(2)} €</span>
+                      </div>
+                    </>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                    <span style={{ color: '#94a3b8' }}>Total HT net</span><span style={{ fontWeight: '600' }}>{htAfter.toFixed(2)} €</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+                    <span style={{ color: '#94a3b8' }}>TVA ({form.tva}%)</span><span style={{ fontWeight: '600' }}>{tvaAmt.toFixed(2)} €</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.6rem' }}>
+                    <span style={{ fontWeight: '700' }}>TOTAL TTC</span><span style={{ fontWeight: '800', fontSize: '1.15rem', color: '#fbbf24' }}>{ttc.toFixed(2)} €</span>
+                  </div>
+                  {aidesT > 0 && (
+                    <>
+                      <div style={{ marginTop: '0.7rem', paddingTop: '0.7rem', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#86efac', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Aides déduites</div>
+                        {form.aides.filter(a => parseFloat(a.amount) > 0).map(a => {
+                          const meta = AIDE_TYPES.find(t => t.value === a.type)
+                          return (
+                            <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#86efac', marginBottom: '0.2rem' }}>
+                              <span>− {a.label || meta?.label || a.type}</span><span>− {(parseFloat(a.amount) || 0).toFixed(2)} €</span>
+                            </div>
+                          )
+                        })}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#bbf7d0', fontWeight: '700', marginTop: '0.3rem' }}>
+                          <span>Total aides</span><span>− {aidesT.toFixed(2)} €</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem', backgroundColor: '#16a34a', padding: '0.8rem 1rem', borderRadius: '8px' }}>
+                        <span style={{ fontWeight: '800', fontSize: '0.9rem' }}>RESTE À CHARGE CLIENT</span>
+                        <span style={{ fontWeight: '900', fontSize: '1.3rem', color: 'white' }}>{reste.toFixed(2)} €</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
               <div>
