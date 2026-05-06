@@ -14,30 +14,109 @@ const quickActions = [
   { icon: '✅', label: "Vérifier éligibilité", prompt: "Comment vérifier si mon client est éligible aux aides MPR, CEE et ANAH ? Quels sont les critères principaux ?" },
 ]
 
+function facHt(f) {
+  const ht = parseFloat(f.amount) || 0
+  const gd = f.globalDiscount && f.globalDiscount.value
+    ? (f.globalDiscount.type === 'percent' ? ht * (parseFloat(f.globalDiscount.value) || 0) / 100 : (parseFloat(f.globalDiscount.value) || 0))
+    : 0
+  return Math.max(0, ht - gd)
+}
+function facTtc(f) {
+  return facHt(f) * (1 + (parseFloat(f.tva) || 10) / 100)
+}
+function devisTtc(d) {
+  const items = d.items || []
+  const sub = items.reduce((s, it) => {
+    const gross = (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0)
+    let net = gross
+    if (it.discount && it.discount.value) {
+      const v = parseFloat(it.discount.value) || 0
+      const da = it.discount.type === 'percent' ? gross * v / 100 : v
+      net = Math.max(0, gross - da)
+    }
+    return s + net
+  }, 0) + (parseFloat(d.laborCost) || 0)
+  const gd = d.globalDiscount && d.globalDiscount.value
+    ? (d.globalDiscount.type === 'percent' ? sub * (parseFloat(d.globalDiscount.value) || 0) / 100 : (parseFloat(d.globalDiscount.value) || 0))
+    : 0
+  const subAfter = Math.max(0, sub - gd)
+  return subAfter * (1 + (parseFloat(d.taxRate) || 10) / 100)
+}
+
 function loadStats() {
-  if (typeof window === 'undefined') return { activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null }
+  const empty = {
+    activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null,
+    caYearPaid: 0, caMonthPaid: 0, totalDevis: 0, acceptedDevis: 0, acceptanceRate: 0,
+    invoicesPaid: 0, invoicesPending: 0, avgTicket: 0, aidesTotal: 0, nbDevisWithAides: 0,
+    rgeExpiryDays: null,
+  }
+  if (typeof window === 'undefined') return empty
   try {
+    const user = JSON.parse(localStorage.getItem('renovexpert_user') || '{}')
     const dossiers = JSON.parse(localStorage.getItem('renovexpert_dossiers') || '[]')
     const clients = JSON.parse(localStorage.getItem('renovexpert_clients') || '[]')
     const factures = JSON.parse(localStorage.getItem('renovexpert_factures') || '[]')
+    const devisList = JSON.parse(localStorage.getItem('renovexpert_devis') || '[]')
     const agenda = JSON.parse(localStorage.getItem('renovexpert_agenda') || '[]')
-    const todayStr = new Date().toISOString().split('T')[0]
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
+    const yearStr = String(today.getFullYear())
+    const monthStr = todayStr.slice(0, 7)
 
     const activeDossiers = dossiers.filter(d => d.status !== 'Complété').length
-    const missingDocs = dossiers.reduce((sum, d) => {
-      return sum + (d.checklist || []).filter(c => c.status === 'manquant' || (!c.status && !c.checked)).length
-    }, 0)
+    const missingDocs = dossiers.reduce((sum, d) =>
+      sum + (d.checklist || []).filter(c => c.status === 'manquant' || (!c.status && !c.checked)).length, 0)
     const activeClients = clients.filter(c => c.status === 'actif').length
+
     const pendingCA = factures
       .filter(f => f.status === 'envoyee' || f.status === 'en_retard')
-      .reduce((s, f) => s + (parseFloat(f.amount) || 0) * (1 + (parseFloat(f.tva) || 10) / 100), 0)
+      .reduce((s, f) => s + facTtc(f), 0)
+
+    const paidFactures = factures.filter(f => f.status === 'payee')
+    const caYearPaid = paidFactures
+      .filter(f => (f.datePaiement || f.dateEmission || '').startsWith(yearStr))
+      .reduce((s, f) => s + facTtc(f), 0)
+    const caMonthPaid = paidFactures
+      .filter(f => (f.datePaiement || f.dateEmission || '').startsWith(monthStr))
+      .reduce((s, f) => s + facTtc(f), 0)
+
+    const totalDevis = devisList.length
+    const acceptedDevis = devisList.filter(d => d.status === 'accepte' || d.locked).length
+    const acceptanceRate = totalDevis > 0 ? Math.round((acceptedDevis / totalDevis) * 100) : 0
+
+    const invoicesPaid = paidFactures.length
+    const invoicesPending = factures.filter(f => f.status === 'envoyee' || f.status === 'en_retard').length
+    const avgTicket = paidFactures.length > 0
+      ? paidFactures.reduce((s, f) => s + facTtc(f), 0) / paidFactures.length
+      : 0
+
+    const devisWithAides = devisList.filter(d => (d.aides || []).some(a => parseFloat(a.amount) > 0))
+    const aidesTotal = devisList.reduce((s, d) =>
+      s + (d.aides || []).reduce((ss, a) => ss + (parseFloat(a.amount) || 0), 0), 0)
+    const nbDevisWithAides = devisWithAides.length
+
+    let rgeExpiryDays = null
+    if (user.rgeExpiry) {
+      const exp = new Date(user.rgeExpiry)
+      if (!isNaN(exp.getTime())) {
+        rgeExpiryDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      }
+    }
+
     const nextEvent = agenda
       .filter(e => e.date >= todayStr)
       .sort((a, b) => a.date.localeCompare(b.date) || a.heure.localeCompare(b.heure))[0] || null
 
-    return { activeDossiers, missingDocs, activeClients, pendingCA, nextEvent }
-  } catch { return { activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null } }
+    return {
+      activeDossiers, missingDocs, activeClients, pendingCA, nextEvent,
+      caYearPaid, caMonthPaid, totalDevis, acceptedDevis, acceptanceRate,
+      invoicesPaid, invoicesPending, avgTicket, aidesTotal, nbDevisWithAides,
+      rgeExpiryDays,
+    }
+  } catch { return empty }
 }
+
+const fmtEur = (n) => Math.round(n).toLocaleString('fr-FR') + ' €'
 
 export default function Dashboard() {
   const [user, setUser] = useState(null)
@@ -49,7 +128,12 @@ export default function Dashboard() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [stats, setStats] = useState({ activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null })
+  const [stats, setStats] = useState({
+    activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null,
+    caYearPaid: 0, caMonthPaid: 0, totalDevis: 0, acceptedDevis: 0, acceptanceRate: 0,
+    invoicesPaid: 0, invoicesPending: 0, avgTicket: 0, aidesTotal: 0, nbDevisWithAides: 0,
+    rgeExpiryDays: null,
+  })
   const [attachedFile, setAttachedFile] = useState(null)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -165,6 +249,82 @@ export default function Dashboard() {
             <Link href="/devis" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', padding: '0.65rem 1.1rem', borderRadius: '10px', fontWeight: '600', fontSize: '0.85rem', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none' }}>📄 Devis</Link>
             <Link href="/clients" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', padding: '0.65rem 1.1rem', borderRadius: '10px', fontWeight: '600', fontSize: '0.85rem', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none' }}>👥 Clients</Link>
             <Link href="/factures" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', padding: '0.65rem 1.1rem', borderRadius: '10px', fontWeight: '600', fontSize: '0.85rem', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none' }}>💰 Factures</Link>
+          </div>
+        </div>
+
+        {/* RGE expiry warning */}
+        {stats.rgeExpiryDays !== null && stats.rgeExpiryDays <= 60 && (
+          <Link href="/settings" style={{ textDecoration: 'none' }}>
+            <div style={{ backgroundColor: stats.rgeExpiryDays < 0 ? '#fee2e2' : '#fef3c7', border: `1px solid ${stats.rgeExpiryDays < 0 ? '#fca5a5' : '#fde68a'}`, borderRadius: '12px', padding: '0.85rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <span style={{ fontSize: '1.4rem' }}>{stats.rgeExpiryDays < 0 ? '🚨' : '⚠️'}</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontWeight: '700', color: stats.rgeExpiryDays < 0 ? '#b91c1c' : '#92400e', fontSize: '0.92rem' }}>
+                  {stats.rgeExpiryDays < 0 ? 'Certification RGE expirée' : `Certification RGE expire dans ${stats.rgeExpiryDays} jour${stats.rgeExpiryDays > 1 ? 's' : ''}`}
+                </p>
+                <p style={{ fontSize: '0.78rem', color: stats.rgeExpiryDays < 0 ? '#991b1b' : '#a16207' }}>
+                  {stats.rgeExpiryDays < 0 ? 'Sans RGE valide, aucune aide MPR/CEE ne sera accordée à vos clients.' : 'Pensez à renouveler avant l\'expiration pour ne pas interrompre l\'accès aux aides.'}
+                </p>
+              </div>
+              <span style={{ color: stats.rgeExpiryDays < 0 ? '#b91c1c' : '#92400e', fontSize: '1.2rem' }}>›</span>
+            </div>
+          </Link>
+        )}
+
+        {/* Aperçu activité */}
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            📊 Aperçu de votre activité
+          </h2>
+
+          {/* Top row — CA highlights */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', marginBottom: '1rem' }}>
+            <Link href="/factures" style={{ textDecoration: 'none' }}>
+              <div style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', borderRadius: '14px', padding: '1.1rem 1.2rem', color: 'white', minHeight: '92px' }}>
+                <p style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#bbf7d0', marginBottom: '0.3rem' }}>CA encaissé {new Date().getFullYear()}</p>
+                <p style={{ fontSize: '1.6rem', fontWeight: '900', lineHeight: 1 }}>{fmtEur(stats.caYearPaid)}</p>
+                <p style={{ fontSize: '0.75rem', color: '#bbf7d0', marginTop: '0.4rem' }}>{stats.invoicesPaid} facture{stats.invoicesPaid > 1 ? 's' : ''} payée{stats.invoicesPaid > 1 ? 's' : ''}</p>
+              </div>
+            </Link>
+            <Link href="/factures" style={{ textDecoration: 'none' }}>
+              <div style={{ backgroundColor: '#fef3c7', borderRadius: '14px', padding: '1.1rem 1.2rem', minHeight: '92px', border: '1px solid #fde68a' }}>
+                <p style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#92400e', marginBottom: '0.3rem' }}>En attente</p>
+                <p style={{ fontSize: '1.6rem', fontWeight: '900', lineHeight: 1, color: '#92400e' }}>{fmtEur(stats.pendingCA)}</p>
+                <p style={{ fontSize: '0.75rem', color: '#a16207', marginTop: '0.4rem' }}>{stats.invoicesPending} facture{stats.invoicesPending > 1 ? 's' : ''} non payée{stats.invoicesPending > 1 ? 's' : ''}</p>
+              </div>
+            </Link>
+            <div style={{ backgroundColor: '#dbeafe', borderRadius: '14px', padding: '1.1rem 1.2rem', minHeight: '92px', border: '1px solid #bfdbfe' }}>
+              <p style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1d4ed8', marginBottom: '0.3rem' }}>CA du mois</p>
+              <p style={{ fontSize: '1.6rem', fontWeight: '900', lineHeight: 1, color: '#1d4ed8' }}>{fmtEur(stats.caMonthPaid)}</p>
+              <p style={{ fontSize: '0.75rem', color: '#1e40af', marginTop: '0.4rem' }}>Panier moyen : {fmtEur(stats.avgTicket)}</p>
+            </div>
+          </div>
+
+          {/* Bottom row — pipeline + aides */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.8rem' }}>
+            <Link href="/devis" style={{ textDecoration: 'none' }}>
+              <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '1rem 1.2rem', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <p style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>📄 Pipeline devis</p>
+                  <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#16a34a', backgroundColor: '#dcfce7', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>{stats.acceptanceRate}% acceptés</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#1e3a5f' }}>{stats.acceptedDevis}</span>
+                  <span style={{ fontSize: '0.85rem', color: '#64748b' }}>/ {stats.totalDevis} devis</span>
+                </div>
+                <div style={{ height: '6px', backgroundColor: '#e2e8f0', borderRadius: '999px', marginTop: '0.5rem', overflow: 'hidden' }}>
+                  <div style={{ width: `${stats.acceptanceRate}%`, height: '100%', backgroundColor: '#16a34a', transition: 'width 0.3s' }} />
+                </div>
+              </div>
+            </Link>
+            <div style={{ backgroundColor: '#ecfdf5', borderRadius: '12px', padding: '1rem 1.2rem', border: '1px solid #a7f3d0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: '700', color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.04em' }}>🏛️ Aides obtenues clients</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
+                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#15803d' }}>{fmtEur(stats.aidesTotal)}</span>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#15803d', marginTop: '0.4rem' }}>sur {stats.nbDevisWithAides} devis avec aides déduites</p>
+            </div>
           </div>
         </div>
 
