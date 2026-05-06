@@ -48,7 +48,7 @@ function loadStats() {
     activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null,
     caYearPaid: 0, caMonthPaid: 0, totalDevis: 0, acceptedDevis: 0, acceptanceRate: 0,
     invoicesPaid: 0, invoicesPending: 0, avgTicket: 0, aidesTotal: 0, nbDevisWithAides: 0,
-    rgeExpiryDays: null,
+    rgeExpiryDays: null, monthlyRevenue: [],
   }
   if (typeof window === 'undefined') return empty
   try {
@@ -103,6 +103,17 @@ function loadStats() {
       }
     }
 
+    const monthLabels = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc']
+    const monthlyRevenue = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const value = paidFactures
+        .filter(f => (f.datePaiement || f.dateEmission || '').startsWith(key))
+        .reduce((s, f) => s + facTtc(f), 0)
+      monthlyRevenue.push({ key, label: monthLabels[d.getMonth()], year: d.getFullYear(), value, isCurrent: i === 0 })
+    }
+
     const nextEvent = agenda
       .filter(e => e.date >= todayStr)
       .sort((a, b) => a.date.localeCompare(b.date) || a.heure.localeCompare(b.heure))[0] || null
@@ -111,7 +122,7 @@ function loadStats() {
       activeDossiers, missingDocs, activeClients, pendingCA, nextEvent,
       caYearPaid, caMonthPaid, totalDevis, acceptedDevis, acceptanceRate,
       invoicesPaid, invoicesPending, avgTicket, aidesTotal, nbDevisWithAides,
-      rgeExpiryDays,
+      rgeExpiryDays, monthlyRevenue,
     }
   } catch { return empty }
 }
@@ -132,7 +143,7 @@ export default function Dashboard() {
     activeDossiers: 0, missingDocs: 0, activeClients: 0, pendingCA: 0, nextEvent: null,
     caYearPaid: 0, caMonthPaid: 0, totalDevis: 0, acceptedDevis: 0, acceptanceRate: 0,
     invoicesPaid: 0, invoicesPending: 0, avgTicket: 0, aidesTotal: 0, nbDevisWithAides: 0,
-    rgeExpiryDays: null,
+    rgeExpiryDays: null, monthlyRevenue: [],
   })
   const [attachedFile, setAttachedFile] = useState(null)
   const messagesEndRef = useRef(null)
@@ -325,6 +336,51 @@ export default function Dashboard() {
               </div>
               <p style={{ fontSize: '0.75rem', color: '#15803d', marginTop: '0.4rem' }}>sur {stats.nbDevisWithAides} devis avec aides déduites</p>
             </div>
+          </div>
+
+          {/* Monthly revenue chart */}
+          <div style={{ marginTop: '1.2rem', padding: '1.1rem 1.2rem', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.9rem' }}>
+              <p style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>📈 Évolution du chiffre d&apos;affaires (12 derniers mois)</p>
+              <p style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Total : <strong style={{ color: '#1e3a5f' }}>{fmtEur(stats.monthlyRevenue.reduce((s, m) => s + m.value, 0))}</strong></p>
+            </div>
+            {(() => {
+              const max = Math.max(...stats.monthlyRevenue.map(m => m.value), 1)
+              const chartH = 140
+              const barW = 100 / stats.monthlyRevenue.length
+              return (
+                <div style={{ position: 'relative' }}>
+                  <svg viewBox={`0 0 100 ${chartH + 28}`} preserveAspectRatio="none" style={{ width: '100%', height: `${chartH + 28}px`, display: 'block', overflow: 'visible' }}>
+                    {[0.25, 0.5, 0.75, 1].map(t => (
+                      <line key={t} x1="0" x2="100" y1={chartH * (1 - t)} y2={chartH * (1 - t)} stroke="#e2e8f0" strokeWidth="0.2" strokeDasharray="0.5,0.8" vectorEffect="non-scaling-stroke" />
+                    ))}
+                    {stats.monthlyRevenue.map((m, i) => {
+                      const h = (m.value / max) * chartH
+                      const x = i * barW
+                      const y = chartH - h
+                      const fill = m.isCurrent ? '#d97706' : '#1e3a5f'
+                      const showLabel = m.value > 0 && (i === 0 || stats.monthlyRevenue.length <= 12)
+                      return (
+                        <g key={m.key}>
+                          <rect x={x + barW * 0.18} y={y} width={barW * 0.64} height={h} fill={fill} rx="0.6" ry="0.6">
+                            <title>{m.label} {m.year} : {fmtEur(m.value)}</title>
+                          </rect>
+                          {showLabel && m.value > 0 && (
+                            <text x={x + barW / 2} y={y - 1.5} fontSize="2.6" fill="#475569" textAnchor="middle" fontWeight="600">{Math.round(m.value / 1000) >= 1 ? `${Math.round(m.value / 1000)}k` : Math.round(m.value)}</text>
+                          )}
+                          <text x={x + barW / 2} y={chartH + 8} fontSize="3.2" fill={m.isCurrent ? '#d97706' : '#94a3b8'} textAnchor="middle" fontWeight={m.isCurrent ? '700' : '500'}>{m.label}</text>
+                        </g>
+                      )
+                    })}
+                  </svg>
+                  {stats.monthlyRevenue.every(m => m.value === 0) && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                      Aucune facture payée ces 12 derniers mois
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
 
