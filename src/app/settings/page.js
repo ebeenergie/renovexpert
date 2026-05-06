@@ -42,6 +42,11 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState({ name: '', email: '', company: '', phone: '', address: '', siret: '', rge: '' })
   const [profileSaved, setProfileSaved] = useState(false)
 
+  // Logo
+  const [logo, setLogo] = useState(null)
+  const [logoError, setLogoError] = useState('')
+  const logoInputRef = useRef(null)
+
   // Signature
   const [artisanSignature, setArtisanSignature] = useState(null)
   const [showSigPad, setShowSigPad] = useState(false)
@@ -67,6 +72,7 @@ export default function SettingsPage() {
     })
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
     setArtisanSignature(s.artisanSignature || null)
+    setLogo(s.logo || null)
     setCgu(s.cgu || DEFAULT_CGU)
   }, [router])
 
@@ -100,6 +106,36 @@ export default function SettingsPage() {
     setArtisanSignature(null)
     saveSettings({ artisanSignature: null })
     toast3('Signature supprimée')
+  }
+
+  function handleLogoFile(file) {
+    setLogoError('')
+    if (!file) return
+    if (!/^image\/(png|jpeg|jpg|svg\+xml|webp)$/.test(file.type)) {
+      setLogoError('Format non supporté. Utilisez PNG, JPG, SVG ou WebP.')
+      return
+    }
+    if (file.size > 1024 * 1024) {
+      setLogoError('Logo trop lourd (max 1 Mo). Compressez l\'image et réessayez.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target.result
+      setLogo(dataUrl)
+      saveSettings({ logo: dataUrl })
+      toast3('✅ Logo enregistré')
+    }
+    reader.onerror = () => setLogoError('Erreur de lecture du fichier.')
+    reader.readAsDataURL(file)
+  }
+
+  function clearLogo() {
+    if (!confirm('Supprimer le logo enregistré ?')) return
+    setLogo(null)
+    saveSettings({ logo: null })
+    if (logoInputRef.current) logoInputRef.current.value = ''
+    toast3('Logo supprimé')
   }
 
   function saveCgu() {
@@ -175,7 +211,46 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Section 2: Signature ── */}
+        {/* ── Section 2: Logo ── */}
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '0.4rem' }}>🖼️ Logo de mon entreprise</h2>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1.2rem' }}>
+            Affiché sur vos devis et factures imprimés. PNG, JPG, SVG ou WebP — max 1 Mo.
+          </p>
+
+          <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+            onChange={e => handleLogoFile(e.target.files?.[0])}
+            style={{ display: 'none' }} />
+
+          {logo ? (
+            <div>
+              <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '1rem', display: 'inline-block', marginBottom: '0.8rem', border: '1px solid #e2e8f0' }}>
+                <img src={logo} alt="Logo entreprise" style={{ height: '120px', maxWidth: '320px', objectFit: 'contain', display: 'block' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button onClick={() => logoInputRef.current?.click()}
+                  style={{ backgroundColor: '#eff6ff', color: '#2563eb', border: '1.5px solid #bfdbfe', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+                  🔄 Remplacer
+                </button>
+                <button onClick={clearLogo}
+                  style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>
+                  🗑 Supprimer
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => logoInputRef.current?.click()}
+              style={{ backgroundColor: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '2rem', width: '100%', cursor: 'pointer', color: '#64748b', fontSize: '0.9rem', fontWeight: '600' }}>
+              + Téléverser un logo
+            </button>
+          )}
+
+          {logoError && (
+            <p style={{ marginTop: '0.6rem', fontSize: '0.82rem', color: '#dc2626' }}>{logoError}</p>
+          )}
+        </div>
+
+        {/* ── Section 3: Signature ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '0.4rem' }}>✍️ Ma signature électronique</h2>
           <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1.2rem' }}>
