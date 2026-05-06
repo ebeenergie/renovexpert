@@ -72,8 +72,8 @@ function saveDevis(list) {
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
-    return { cgu: s.cgu || DEFAULT_CGU, artisanSignature: s.artisanSignature || null }
-  } catch { return { cgu: DEFAULT_CGU, artisanSignature: null } }
+    return { cgu: s.cgu || DEFAULT_CGU, artisanSignature: s.artisanSignature || null, logo: s.logo || null }
+  } catch { return { cgu: DEFAULT_CGU, artisanSignature: null, logo: null } }
 }
 
 const emptyForm = () => ({
@@ -108,7 +108,7 @@ export default function DevisPage() {
   const [toast, setToast] = useState('')
 
   // Settings / CGU
-  const [settings, setSettings] = useState({ cgu: DEFAULT_CGU, artisanSignature: null })
+  const [settings, setSettings] = useState({ cgu: DEFAULT_CGU, artisanSignature: null, logo: null })
   const [cguEditing, setCguEditing] = useState(false)
   const [cguDraft, setCguDraft] = useState('')
 
@@ -363,7 +363,11 @@ export default function DevisPage() {
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '2px solid #1e3a5f' }}>
             <div>
-              <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1e3a5f' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></div>
+              {settings.logo ? (
+                <img src={settings.logo} alt="Logo entreprise" style={{ maxHeight: '80px', maxWidth: '240px', objectFit: 'contain', display: 'block' }} />
+              ) : (
+                <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1e3a5f' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></div>
+              )}
               <div style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.5rem' }}>{selected.artisanName} · {selected.artisanCompany}</div>
             </div>
             <div style={{ textAlign: 'right' }}>

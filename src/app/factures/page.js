@@ -63,8 +63,8 @@ function nextNumber(factures) {
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
-    return { cgu: s.cgu || DEFAULT_CGU, artisanSignature: s.artisanSignature || null }
-  } catch { return { cgu: DEFAULT_CGU, artisanSignature: null } }
+    return { cgu: s.cgu || DEFAULT_CGU, artisanSignature: s.artisanSignature || null, logo: s.logo || null }
+  } catch { return { cgu: DEFAULT_CGU, artisanSignature: null, logo: null } }
 }
 
 const blank = {
@@ -88,7 +88,7 @@ export default function FacturesPage() {
   const [toast, setToast] = useState('')
 
   // Settings / CGU
-  const [settings, setSettings] = useState({ cgu: DEFAULT_CGU, artisanSignature: null })
+  const [settings, setSettings] = useState({ cgu: DEFAULT_CGU, artisanSignature: null, logo: null })
   const [cguEditing, setCguEditing] = useState(false)
   const [cguDraft, setCguDraft] = useState('')
 
@@ -449,8 +449,12 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
             {/* Print header */}
             <div style={{ borderBottom: '3px solid #1e3a5f', paddingBottom: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h2 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#1e3a5f' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></h2>
-                {user && <p style={{ color: '#64748b', fontSize: '0.85rem' }}>{user.company}</p>}
+                {settings.logo ? (
+                  <img src={settings.logo} alt="Logo entreprise" style={{ maxHeight: '70px', maxWidth: '220px', objectFit: 'contain', display: 'block' }} />
+                ) : (
+                  <h2 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#1e3a5f' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></h2>
+                )}
+                {user && <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.4rem' }}>{user.company}</p>}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1e3a5f' }}>FACTURE</h3>
