@@ -111,6 +111,12 @@ export default function FacturesPage() {
     }
   }, [router])
 
+  useEffect(() => {
+    if (showSignModal && signStep === 1 && settings.artisanSignature) {
+      artisanPadRef.current?.loadDataURL(settings.artisanSignature)
+    }
+  }, [showSignModal, signStep, settings.artisanSignature])
+
   function save(list) { setFactures(list); localStorage.setItem('renovexpert_factures', JSON.stringify(list)) }
   function toast3(msg) { setToast(msg); setTimeout(() => setToast(''), 3500) }
 

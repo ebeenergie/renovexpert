@@ -139,6 +139,12 @@ export default function DevisPage() {
     }
   }, [router])
 
+  useEffect(() => {
+    if (showSignModal && signStep === 1 && settings.artisanSignature) {
+      artisanPadRef.current?.loadDataURL(settings.artisanSignature)
+    }
+  }, [showSignModal, signStep, settings.artisanSignature])
+
   const persistAndSet = (updated) => { saveDevis(updated); setDevisList(updated) }
   function toast3(msg) { setToast(msg); setTimeout(() => setToast(''), 3500) }
 
