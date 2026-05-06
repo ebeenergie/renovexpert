@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import BottomNav from '../components/BottomNav'
 import SignaturePad from '../components/SignaturePad'
-import EmailModal from '../components/EmailModal'
+import SendDocumentModal from '../components/SendDocumentModal'
 
 const STORAGE_KEY = 'renovexpert_devis'
 const SETTINGS_KEY = 'renovexpert_settings'
@@ -102,9 +102,8 @@ export default function DevisPage() {
   const [cguEditing, setCguEditing] = useState(false)
   const [cguDraft, setCguDraft] = useState('')
 
-  // Email
+  // Email / signing
   const [showEmail, setShowEmail] = useState(false)
-  const [emailData, setEmailData] = useState({ to: '', subject: '', body: '' })
 
   // Signing
   const [showSignModal, setShowSignModal] = useState(false)
@@ -118,6 +117,7 @@ export default function DevisPage() {
     setUser(JSON.parse(stored))
     const list = loadDevis()
     setDevisList(list)
+    syncSigningStatus(list)
     setClients(JSON.parse(localStorage.getItem('renovexpert_clients') || '[]'))
     const cat = localStorage.getItem('renovexpert_catalogue')
     if (cat) setCatalogue(JSON.parse(cat))
@@ -148,37 +148,34 @@ export default function DevisPage() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated))
   }
 
-  function openEmail(d) {
-    const sub = calcSubtotal(d.items, d.laborCost)
-    const tx = calcTax(sub, d.taxRate)
-    const tot = calcTotal(sub, tx)
-    const artisan = JSON.parse(localStorage.getItem('renovexpert_user') || '{}')
-    setEmailData({
-      to: d.clientEmail || '',
-      subject: `Devis ${d.numero} — ${artisan.company || d.artisanCompany}`,
-      body: `Bonjour ${d.clientName},
-
-Veuillez trouver ci-dessous notre devis ${d.numero} en date du ${d.createdAt}.
-
-──────────────────────────────────
-DEVIS N° ${d.numero}
-──────────────────────────────────
-Client      : ${d.clientName}${d.clientAddress ? '\nAdresse     : ' + d.clientAddress : ''}
-Date        : ${d.createdAt}
-Objet       : ${d.workDescription}
-
-Total HT    : ${fmt(sub)}
-TVA (${d.taxRate}%)  : ${fmt(tx)}
-Total TTC   : ${fmt(tot)}
-──────────────────────────────────
-
-Ce devis est valable 30 jours. Pour l'accepter, merci de nous le retourner signé avec la mention "Bon pour accord".
-
-Cordialement,
-${artisan.name || d.artisanName}
-${artisan.company || d.artisanCompany}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.email ? '\n' + artisan.email : ''}`,
-    })
+  function openEmail() {
     setShowEmail(true)
+  }
+
+  async function syncSigningStatus(list) {
+    const pending = list.filter(d => d.signingStatus === 'sent' || d.signingStatus === 'viewed')
+    if (pending.length === 0) return
+    const updated = [...list]
+    for (const d of pending) {
+      try {
+        const res = await fetch(`/api/sign/${d.id}`)
+        const data = await res.json()
+        if (data.signingStatus && data.signingStatus !== d.signingStatus) {
+          const idx = updated.findIndex(x => x.id === d.id)
+          if (idx !== -1) {
+            updated[idx] = {
+              ...updated[idx],
+              signingStatus: data.signingStatus,
+              signedAt: data.signedAt || updated[idx].signedAt,
+              clientSignature: data.clientSignature || updated[idx].clientSignature,
+              locked: data.signingStatus === 'signed' ? true : updated[idx].locked,
+              status: data.signingStatus === 'signed' ? 'accepte' : updated[idx].status,
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    persistAndSet(updated)
   }
 
   function openSignModal() {
@@ -449,6 +446,8 @@ ${artisan.company || d.artisanCompany}${artisan.phone ? '\n' + artisan.phone : '
                     <span style={{ fontWeight: '700', fontSize: '0.9rem', color: isActive ? 'white' : '#1e3a5f' }}>{d.clientName}</span>
                     <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
                       {d.locked && <span style={{ fontSize: '0.65rem', fontWeight: '700', padding: '0.1rem 0.4rem', borderRadius: '999px', backgroundColor: '#dcfce7', color: '#15803d' }}>✅ Signé</span>}
+                      {!d.locked && d.signingStatus === 'sent' && <span style={{ fontSize: '0.65rem', fontWeight: '700', padding: '0.1rem 0.4rem', borderRadius: '999px', backgroundColor: '#dbeafe', color: '#1d4ed8' }}>📧 Envoyé</span>}
+                      {!d.locked && d.signingStatus === 'viewed' && <span style={{ fontSize: '0.65rem', fontWeight: '700', padding: '0.1rem 0.4rem', borderRadius: '999px', backgroundColor: '#fef9c3', color: '#92400e' }}>👁 Consulté</span>}
                       <span style={{ fontSize: '0.7rem', fontWeight: '700', padding: '0.15rem 0.5rem', borderRadius: '999px', backgroundColor: sc.bg, color: sc.color }}>{STATUS_LABELS[d.status]}</span>
                     </div>
                   </div>
@@ -613,6 +612,8 @@ ${artisan.company || d.artisanCompany}${artisan.phone ? '\n' + artisan.phone : '
                         {selected.locked && (
                           <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.7rem', borderRadius: '999px', backgroundColor: '#dcfce7', color: '#15803d' }}>✅ Signé électroniquement</span>
                         )}
+                      {!selected.locked && selected.signingStatus === 'sent' && <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.7rem', borderRadius: '999px', backgroundColor: '#dbeafe', color: '#1d4ed8' }}>📧 Envoyé — en attente</span>}
+                      {!selected.locked && selected.signingStatus === 'viewed' && <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.7rem', borderRadius: '999px', backgroundColor: '#fef9c3', color: '#92400e' }}>👁 Consulté — en attente</span>}
                       </div>
                       <div style={{ fontSize: '0.88rem', color: '#64748b' }}>{selected.numero} · {selected.createdAt}</div>
                       {selected.signedAt && <div style={{ fontSize: '0.82rem', color: '#16a34a', marginTop: '0.2rem' }}>🔒 Signé le {selected.signedAt}</div>}
