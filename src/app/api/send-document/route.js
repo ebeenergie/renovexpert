@@ -11,7 +11,7 @@ export async function POST(req) {
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY)
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://renovexpert.fr'
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://renovexpert-jade.vercel.app'
     const signingUrl = `${baseUrl}/signer/${document.id}`
 
     // Store document in KV (90 day TTL)
