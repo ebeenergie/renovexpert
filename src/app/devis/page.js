@@ -847,6 +847,12 @@ export default function DevisPage() {
 
                 {/* Header card */}
                 <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                  {settings.logo && (
+                    <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                      <img src={settings.logo} alt="Logo entreprise" style={{ maxHeight: '44px', maxWidth: '160px', objectFit: 'contain' }} />
+                      <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: '600', letterSpacing: '0.05em' }}>{selected.artisanCompany || selected.artisanName}</span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
