@@ -218,7 +218,7 @@ Règlement à effectuer à réception${fac.dateEcheance ? ' avant le ' + fac.dat
 
 Cordialement,
 ${artisan.name || ''}
-${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.email ? '\n' + artisan.email : ''}`,
+${artisan.company || ''}${artisan.address ? '\n' + artisan.address : ''}${(artisan.postalCode || artisan.city) ? '\n' + (artisan.postalCode || '') + ' ' + (artisan.city || '') : ''}${artisan.phone ? '\n📞 ' + artisan.phone : ''}${artisan.email ? '\n✉️ ' + artisan.email : ''}${artisan.website ? '\n🌐 ' + artisan.website : ''}${artisan.siret ? '\n\nSIRET : ' + artisan.siret : ''}${artisan.tvaNumber ? '\nTVA : ' + artisan.tvaNumber : ''}${artisan.rge ? '\nRGE : ' + artisan.rge : ''}`,
     })
     setShowEmail(true)
   }
@@ -447,14 +447,26 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '620px', maxHeight: '90vh', overflowY: 'auto' }}>
             {/* Print header */}
-            <div style={{ borderBottom: '3px solid #1e3a5f', paddingBottom: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
+            <div style={{ borderBottom: '3px solid #1e3a5f', paddingBottom: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+              <div style={{ flex: 1 }}>
                 {settings.logo ? (
-                  <img src={settings.logo} alt="Logo entreprise" style={{ maxHeight: '70px', maxWidth: '220px', objectFit: 'contain', display: 'block' }} />
+                  <img src={settings.logo} alt="Logo entreprise" style={{ maxHeight: '70px', maxWidth: '220px', objectFit: 'contain', display: 'block', marginBottom: '0.5rem' }} />
                 ) : (
                   <h2 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#1e3a5f' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></h2>
                 )}
-                {user && <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.4rem' }}>{user.company}</p>}
+                {user && (
+                  <>
+                    <p style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>{user.company}</p>
+                    {user.name && <p style={{ color: '#475569', fontSize: '0.82rem' }}>{user.name}</p>}
+                    <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.3rem', lineHeight: 1.5 }}>
+                      {user.address && <div>{user.address}</div>}
+                      {(user.postalCode || user.city) && <div>{user.postalCode} {user.city}</div>}
+                      {user.phone && <div>📞 {user.phone}</div>}
+                      {user.email && <div>✉️ {user.email}</div>}
+                      {user.website && <div>🌐 {user.website}</div>}
+                    </div>
+                  </>
+                )}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1e3a5f' }}>FACTURE</h3>
@@ -571,8 +583,26 @@ ${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.em
               </div>
             )}
 
+            {/* Coordonnées bancaires (factures only) */}
+            {user && (user.iban || user.bic) && (
+              <div style={{ marginTop: '1.5rem', padding: '0.8rem 1rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: '700', color: '#1e3a5f', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coordonnées bancaires pour règlement</p>
+                {user.iban && <p style={{ fontSize: '0.82rem', color: '#374151' }}>IBAN : <span style={{ fontFamily: 'monospace', fontWeight: '600' }}>{user.iban}</span></p>}
+                {user.bic && <p style={{ fontSize: '0.82rem', color: '#374151' }}>BIC / SWIFT : <span style={{ fontFamily: 'monospace', fontWeight: '600' }}>{user.bic}</span></p>}
+              </div>
+            )}
+
+            {/* Identification entreprise (footer) */}
+            {user && (user.siret || user.tvaNumber || user.rge) && (
+              <div style={{ marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.6 }}>
+                {user.siret && <span>SIRET : {user.siret}</span>}
+                {user.tvaNumber && <span>{user.siret ? ' · ' : ''}TVA intracommunautaire : {user.tvaNumber}</span>}
+                {user.rge && <span>{user.siret || user.tvaNumber ? ' · ' : ''}Certifié RGE n° {user.rge}{user.rgeExpiry ? ` (valide jusqu'au ${new Date(user.rgeExpiry).toLocaleDateString('fr-FR')})` : ''}</span>}
+              </div>
+            )}
+
             {/* CGU in print */}
-            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
               <p style={{ fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Conditions Générales de Vente</p>
               <p style={{ fontSize: '0.68rem', color: '#94a3b8', whiteSpace: 'pre-line', lineHeight: 1.5 }}>{settings.cgu}</p>
             </div>

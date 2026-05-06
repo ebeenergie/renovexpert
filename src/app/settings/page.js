@@ -39,7 +39,14 @@ export default function SettingsPage() {
   const [toast, setToast] = useState('')
 
   // Profile form
-  const [profile, setProfile] = useState({ name: '', email: '', company: '', phone: '', address: '', siret: '', rge: '' })
+  const [profile, setProfile] = useState({
+    name: '', email: '', company: '', phone: '',
+    address: '', city: '', postalCode: '',
+    website: '',
+    siret: '', tvaNumber: '',
+    rge: '', rgeExpiry: '',
+    iban: '', bic: '',
+  })
   const [profileSaved, setProfileSaved] = useState(false)
 
   // Logo
@@ -67,8 +74,15 @@ export default function SettingsPage() {
       company: u.company || '',
       phone: u.phone || '',
       address: u.address || '',
+      city: u.city || '',
+      postalCode: u.postalCode || '',
+      website: u.website || '',
       siret: u.siret || '',
+      tvaNumber: u.tvaNumber || '',
       rge: u.rge || '',
+      rgeExpiry: u.rgeExpiry || '',
+      iban: u.iban || '',
+      bic: u.bic || '',
     })
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
     setArtisanSignature(s.artisanSignature || null)
@@ -170,44 +184,116 @@ export default function SettingsPage() {
 
       <div style={{ maxWidth: '700px', margin: '0 auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-        {/* ── Section 1: Profil ── */}
+        {/* ── Section 1: Société ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '1.2rem' }}>👤 Mon profil artisan</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
-              <div>
-                <label style={lbl}>Nom complet</label>
-                <input value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} placeholder="Jean Dupont" style={inp} />
+          <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '0.4rem' }}>🏢 Informations société</h2>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1.2rem' }}>
+            Ces informations apparaissent automatiquement en en-tête de vos devis, factures et signatures email.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
+
+            <fieldset style={fieldsetStyle}>
+              <legend style={legendStyle}>Contact</legend>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+                <div><label style={lbl}>Nom complet *</label>
+                  <input value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} placeholder="Jean Dupont" style={inp} /></div>
+                <div><label style={lbl}>Email *</label>
+                  <input value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} placeholder="jean@entreprise.fr" type="email" style={inp} /></div>
+                <div><label style={lbl}>Téléphone</label>
+                  <input value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} placeholder="06 00 00 00 00" type="tel" style={inp} /></div>
+                <div><label style={lbl}>Site web</label>
+                  <input value={profile.website} onChange={e => setProfile(p => ({ ...p, website: e.target.value }))} placeholder="www.dupont-renovation.fr" style={inp} /></div>
               </div>
-              <div>
-                <label style={lbl}>Entreprise</label>
-                <input value={profile.company} onChange={e => setProfile(p => ({ ...p, company: e.target.value }))} placeholder="Dupont Rénovation" style={inp} />
+            </fieldset>
+
+            <fieldset style={fieldsetStyle}>
+              <legend style={legendStyle}>Adresse</legend>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.8rem' }}>
+                <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>Adresse</label>
+                  <input value={profile.address} onChange={e => setProfile(p => ({ ...p, address: e.target.value }))} placeholder="12 rue des Artisans" style={inp} /></div>
+                <div><label style={lbl}>Code postal</label>
+                  <input value={profile.postalCode} onChange={e => setProfile(p => ({ ...p, postalCode: e.target.value }))} placeholder="75011" style={inp} /></div>
+                <div style={{ gridColumn: '2 / span 2' }}><label style={lbl}>Ville</label>
+                  <input value={profile.city} onChange={e => setProfile(p => ({ ...p, city: e.target.value }))} placeholder="Paris" style={inp} /></div>
               </div>
-              <div>
-                <label style={lbl}>Email</label>
-                <input value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} placeholder="jean@entreprise.fr" type="email" style={inp} />
+            </fieldset>
+
+            <fieldset style={fieldsetStyle}>
+              <legend style={legendStyle}>Identification entreprise</legend>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+                <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>Raison sociale / Entreprise</label>
+                  <input value={profile.company} onChange={e => setProfile(p => ({ ...p, company: e.target.value }))} placeholder="Dupont Rénovation SARL" style={inp} /></div>
+                <div><label style={lbl}>Numéro SIRET</label>
+                  <input value={profile.siret} onChange={e => setProfile(p => ({ ...p, siret: e.target.value }))} placeholder="123 456 789 00012" style={inp} /></div>
+                <div><label style={lbl}>N° TVA intracommunautaire</label>
+                  <input value={profile.tvaNumber} onChange={e => setProfile(p => ({ ...p, tvaNumber: e.target.value }))} placeholder="FR 12 345678901" style={inp} /></div>
+                <div><label style={lbl}>Numéro RGE</label>
+                  <input value={profile.rge} onChange={e => setProfile(p => ({ ...p, rge: e.target.value }))} placeholder="E-E190101" style={inp} /></div>
+                <div><label style={lbl}>Validité RGE (date d&apos;expiration)</label>
+                  <input value={profile.rgeExpiry} onChange={e => setProfile(p => ({ ...p, rgeExpiry: e.target.value }))} type="date" style={inp} /></div>
               </div>
-              <div>
-                <label style={lbl}>Téléphone</label>
-                <input value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} placeholder="06 00 00 00 00" type="tel" style={inp} />
+            </fieldset>
+
+            <fieldset style={fieldsetStyle}>
+              <legend style={legendStyle}>Coordonnées bancaires (factures)</legend>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.8rem' }}>
+                <div><label style={lbl}>IBAN</label>
+                  <input value={profile.iban} onChange={e => setProfile(p => ({ ...p, iban: e.target.value }))} placeholder="FR76 1234 5678 9012 3456 7890 123" style={inp} /></div>
+                <div><label style={lbl}>BIC / SWIFT</label>
+                  <input value={profile.bic} onChange={e => setProfile(p => ({ ...p, bic: e.target.value }))} placeholder="BNPAFRPP" style={inp} /></div>
               </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={lbl}>Adresse professionnelle</label>
-                <input value={profile.address} onChange={e => setProfile(p => ({ ...p, address: e.target.value }))} placeholder="12 rue des Artisans, 75011 Paris" style={inp} />
+            </fieldset>
+
+            <button onClick={saveProfile}
+              style={{ alignSelf: 'flex-start', backgroundColor: profileSaved ? '#16a34a' : '#d97706', color: 'white', border: 'none', padding: '0.85rem 1.6rem', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '0.95rem', transition: 'background-color 0.2s' }}>
+              {profileSaved ? '✅ Enregistré !' : '💾 Enregistrer les informations société'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Aperçu document ── */}
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '0.4rem' }}>👁️ Aperçu en-tête de document</h2>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1rem' }}>
+            Voici comment vos informations apparaîtront en haut de chaque devis et facture.
+          </p>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem', backgroundColor: '#fafafa' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #1e3a5f', paddingBottom: '1rem', marginBottom: '0.8rem', gap: '1rem' }}>
+              <div style={{ flex: 1 }}>
+                {logo ? (
+                  <img src={logo} alt="Logo" style={{ maxHeight: '60px', maxWidth: '180px', objectFit: 'contain', display: 'block', marginBottom: '0.5rem' }} />
+                ) : (
+                  <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '0.4rem' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></div>
+                )}
+                <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e293b' }}>{profile.company || '— Raison sociale —'}</div>
+                {profile.name && <div style={{ fontSize: '0.85rem', color: '#475569' }}>{profile.name}</div>}
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.3rem', lineHeight: 1.5 }}>
+                  {profile.address && <div>{profile.address}</div>}
+                  {(profile.postalCode || profile.city) && <div>{profile.postalCode} {profile.city}</div>}
+                  {profile.phone && <div>📞 {profile.phone}</div>}
+                  {profile.email && <div>✉️ {profile.email}</div>}
+                  {profile.website && <div>🌐 {profile.website}</div>}
+                </div>
               </div>
-              <div>
-                <label style={lbl}>Numéro SIRET</label>
-                <input value={profile.siret} onChange={e => setProfile(p => ({ ...p, siret: e.target.value }))} placeholder="123 456 789 00012" style={inp} />
-              </div>
-              <div>
-                <label style={lbl}>Numéro RGE</label>
-                <input value={profile.rge} onChange={e => setProfile(p => ({ ...p, rge: e.target.value }))} placeholder="E-E190101" style={inp} />
+              <div style={{ textAlign: 'right', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e3a5f', marginBottom: '0.4rem' }}>DEVIS</div>
+                <div>N° DEV-2026-XXX</div>
+                <div>Date : {new Date().toLocaleDateString('fr-FR')}</div>
               </div>
             </div>
-            <button onClick={saveProfile}
-              style={{ alignSelf: 'flex-start', backgroundColor: profileSaved ? '#16a34a' : '#d97706', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '0.95rem', transition: 'background-color 0.2s' }}>
-              {profileSaved ? '✅ Enregistré !' : 'Enregistrer le profil'}
-            </button>
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', textAlign: 'center', lineHeight: 1.6, marginTop: '0.5rem' }}>
+              {profile.siret && <span>SIRET : {profile.siret}</span>}
+              {profile.tvaNumber && <span>{profile.siret ? ' · ' : ''}TVA : {profile.tvaNumber}</span>}
+              {profile.rge && <span>{profile.siret || profile.tvaNumber ? ' · ' : ''}RGE : {profile.rge}{profile.rgeExpiry ? ` (valide jusqu'au ${new Date(profile.rgeExpiry).toLocaleDateString('fr-FR')})` : ''}</span>}
+              {!profile.siret && !profile.tvaNumber && !profile.rge && <span>— SIRET · TVA · RGE apparaîtront ici —</span>}
+            </div>
+            {(profile.iban || profile.bic) && (
+              <div style={{ marginTop: '1rem', padding: '0.6rem 0.8rem', backgroundColor: 'white', borderRadius: '8px', fontSize: '0.72rem', color: '#475569' }}>
+                <strong style={{ color: '#1e3a5f' }}>Coordonnées bancaires (factures) :</strong>
+                {profile.iban && <span style={{ marginLeft: '0.5rem' }}>IBAN {profile.iban}</span>}
+                {profile.bic && <span style={{ marginLeft: '0.5rem' }}>· BIC {profile.bic}</span>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -368,3 +454,5 @@ export default function SettingsPage() {
 
 const lbl = { display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' }
 const inp = { width: '100%', padding: '0.75rem 0.9rem', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box' }
+const fieldsetStyle = { border: '1px solid #f1f5f9', borderRadius: '12px', padding: '1rem 1.1rem 1.1rem', margin: 0 }
+const legendStyle = { fontSize: '0.78rem', fontWeight: '700', color: '#1e3a5f', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 0.5rem' }

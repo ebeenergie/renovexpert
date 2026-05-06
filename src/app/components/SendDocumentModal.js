@@ -135,7 +135,7 @@ ${isDevis ? 'Ce devis est valable 30 jours. Pour l\'accepter, signez en ligne vi
 
 Cordialement,
 ${artisan.name || ''}
-${artisan.company || ''}${artisan.phone ? '\n' + artisan.phone : ''}${artisan.email ? '\n' + artisan.email : ''}`
+${artisan.company || ''}${artisan.address ? '\n' + artisan.address : ''}${(artisan.postalCode || artisan.city) ? '\n' + (artisan.postalCode || '') + ' ' + (artisan.city || '') : ''}${artisan.phone ? '\n📞 ' + artisan.phone : ''}${artisan.email ? '\n✉️ ' + artisan.email : ''}${artisan.website ? '\n🌐 ' + artisan.website : ''}${artisan.siret ? '\n\nSIRET : ' + artisan.siret : ''}${artisan.tvaNumber ? '\nTVA : ' + artisan.tvaNumber : ''}${artisan.rge ? '\nRGE : ' + artisan.rge : ''}`
 }
 
 const lbl = { display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' }

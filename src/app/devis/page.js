@@ -361,16 +361,24 @@ export default function DevisPage() {
         </div>
         <div className="print-page">
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '2px solid #1e3a5f' }}>
-            <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '2px solid #1e3a5f', gap: '1.5rem' }}>
+            <div style={{ flex: 1 }}>
               {settings.logo ? (
-                <img src={settings.logo} alt="Logo entreprise" style={{ maxHeight: '80px', maxWidth: '240px', objectFit: 'contain', display: 'block' }} />
+                <img src={settings.logo} alt="Logo entreprise" style={{ maxHeight: '80px', maxWidth: '240px', objectFit: 'contain', display: 'block', marginBottom: '0.6rem' }} />
               ) : (
                 <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1e3a5f' }}>Renov<span style={{ color: '#d97706' }}>Expert</span></div>
               )}
-              <div style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.5rem' }}>{selected.artisanName} · {selected.artisanCompany}</div>
+              <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>{user.company || selected.artisanCompany}</div>
+              {user.name && <div style={{ fontSize: '0.85rem', color: '#475569' }}>{user.name}</div>}
+              <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.4rem', lineHeight: 1.5 }}>
+                {user.address && <div>{user.address}</div>}
+                {(user.postalCode || user.city) && <div>{user.postalCode} {user.city}</div>}
+                {user.phone && <div>📞 {user.phone}</div>}
+                {user.email && <div>✉️ {user.email}</div>}
+                {user.website && <div>🌐 {user.website}</div>}
+              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'right', minWidth: '180px' }}>
               <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e3a5f' }}>DEVIS</div>
               <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{selected.numero}</div>
               <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Date : {selected.createdAt}</div>
@@ -518,8 +526,17 @@ export default function DevisPage() {
             </div>
           )}
 
+          {/* Identification entreprise (footer) */}
+          {(user.siret || user.tvaNumber || user.rge) && (
+            <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.6 }}>
+              {user.siret && <span>SIRET : {user.siret}</span>}
+              {user.tvaNumber && <span>{user.siret ? ' · ' : ''}TVA intracommunautaire : {user.tvaNumber}</span>}
+              {user.rge && <span>{user.siret || user.tvaNumber ? ' · ' : ''}Certifié RGE n° {user.rge}{user.rgeExpiry ? ` (valide jusqu'au ${new Date(user.rgeExpiry).toLocaleDateString('fr-FR')})` : ''}</span>}
+            </div>
+          )}
+
           {/* CGU */}
-          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0' }}>
             <div style={{ fontWeight: '700', color: '#94a3b8', marginBottom: '0.5rem', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conditions Générales de Vente</div>
             <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{settings.cgu}</div>
           </div>
